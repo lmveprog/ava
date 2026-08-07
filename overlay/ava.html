@@ -1,0 +1,605 @@
+<title>Ava — overlay</title>
+<style>
+  :root{
+    --ink: rgba(251,251,251,0.92);
+    --ink-soft: rgba(251,251,251,0.55);
+    --ink-faint: rgba(251,251,251,0.34);
+    --glass: rgba(20,20,24,0.55);
+    --hair: rgba(255,255,255,0.07);
+    --pill-h: 74px;
+    --accent: 107,122,143;              /* etat courant, en r,g,b (pilote par le js) */
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; overflow:hidden; }
+  /* fond sombre par defaut = aperçu ; l'overlay reel appelle avaOverlayMode() */
+  html{ background:
+      radial-gradient(120% 90% at 80% 0%, #141418 0%, #0a0a0c 45%, #060607 100%); }
+  html.overlay, html.overlay body{ background:transparent !important; }
+  body{
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+    color:var(--ink);
+    /* aligne en haut a droite, comme demande */
+    display:flex; align-items:flex-start; justify-content:flex-end;
+    padding:16px;
+  }
+
+  /* ------- la pilule d'etat (orbe + texte) ------- */
+  .pill{
+    display:inline-flex; align-items:center; gap:14px;
+    height:var(--pill-h);
+    padding:9px 26px 9px 9px;
+    border-radius:999px;
+    background:var(--glass);
+    -webkit-backdrop-filter:blur(22px) saturate(1.3);
+    backdrop-filter:blur(22px) saturate(1.3);
+    box-shadow:
+      inset 0 0 0 1px var(--hair),
+      inset 0 1px 0 0 rgba(255,255,255,0.05),
+      inset 0 0 60px 0 rgba(255,255,255,0.015),
+      0 18px 50px -18px rgba(0,0,0,0.8),
+      0 0 0 1px rgba(0,0,0,0.25);
+    transform-origin:top right;
+    transition:opacity .5s ease, transform .5s cubic-bezier(.2,.8,.2,1);
+    will-change:transform,opacity;
+  }
+  .pill.hidden{ opacity:0; transform:scale(.86) translateY(-6px); pointer-events:none; }
+
+  .orb-wrap{ position:relative; width:56px; height:56px; flex:0 0 auto; }
+  canvas.orb{ position:absolute; inset:-16px; width:88px; height:88px; }
+
+  .label{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .kicker{
+    font-size:10.5px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--ink-faint); font-weight:600;
+    transition:color .4s ease;
+  }
+  .status{
+    font-size:17px; line-height:1.35; color:var(--ink-soft);
+    white-space:nowrap; max-width:52vw; overflow:hidden; text-overflow:ellipsis;
+    font-weight:450; letter-spacing:.005em;
+    transition:color .4s ease;
+  }
+  .status .dots::after{
+    content:""; animation:dots 1.4s steps(4,end) infinite;
+  }
+  @keyframes dots{ 0%{content:""} 25%{content:"."} 50%{content:".."} 75%{content:"..."} 100%{content:""} }
+
+  /* ------- carte de demarrage (montre ce qui s'ouvre) ------- */
+  .boot{
+    position:relative;
+    width:320px; padding:20px 20px 16px;
+    border-radius:22px;
+    background:var(--glass);
+    -webkit-backdrop-filter:blur(22px) saturate(1.3);
+    backdrop-filter:blur(22px) saturate(1.3);
+    box-shadow:
+      inset 0 0 0 1px var(--hair),
+      inset 0 1px 0 0 rgba(255,255,255,0.05),
+      0 24px 60px -20px rgba(0,0,0,0.85);
+    transition:opacity .5s ease, transform .5s cubic-bezier(.2,.8,.2,1);
+    transform-origin:top right;
+  }
+  .boot.hidden{ opacity:0; transform:scale(.92) translateY(-8px); pointer-events:none; }
+  .boot-head{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .boot-orb{ position:relative; width:40px; height:40px; flex:0 0 auto; }
+  .boot-orb canvas{ position:absolute; inset:-12px; width:64px; height:64px; }
+  .boot-title{ font-size:15px; font-weight:600; color:var(--ink); letter-spacing:.01em; }
+  .boot-sub{ font-size:11.5px; color:var(--ink-faint); letter-spacing:.02em; margin-top:1px; }
+
+  .rows{ display:flex; flex-direction:column; gap:2px; }
+  .row{
+    display:flex; align-items:center; gap:11px;
+    padding:8px 6px; border-radius:12px;
+    opacity:0; transform:translateY(6px);
+    transition:opacity .35s ease, transform .35s cubic-bezier(.2,.8,.2,1), background .3s ease;
+  }
+  .row.in{ opacity:1; transform:none; }
+  .row.done{ background:rgba(255,255,255,0.03); }
+  .dot{
+    position:relative; width:18px; height:18px; flex:0 0 auto;
+    border-radius:50%;
+    box-shadow:inset 0 0 0 1.5px rgba(255,255,255,0.18);
+  }
+  .dot .spin{
+    position:absolute; inset:0; border-radius:50%;
+    border:1.5px solid transparent;
+    border-top-color:rgba(var(--accent),0.95);
+    border-right-color:rgba(var(--accent),0.5);
+    animation:spin .7s linear infinite;
+  }
+  .row.done .dot{ box-shadow:inset 0 0 0 1.5px rgba(var(--accent),0.9); background:rgba(var(--accent),0.16); }
+  .row.done .spin{ display:none; }
+  .check{ position:absolute; inset:0; display:grid; place-items:center; opacity:0; transform:scale(.6); transition:opacity .25s ease, transform .25s cubic-bezier(.2,.9,.3,1.4); }
+  .row.done .check{ opacity:1; transform:none; }
+  .check svg{ width:11px; height:11px; }
+  @keyframes spin{ to{ transform:rotate(360deg) } }
+  .row-name{ font-size:14px; color:var(--ink-soft); font-weight:450; }
+  .row.done .row-name{ color:var(--ink); }
+  .row-tag{ margin-left:auto; font-size:10.5px; color:var(--ink-faint); letter-spacing:.16em; text-transform:uppercase; }
+
+  /* ------- bouton engrenage (sur la pilule) ------- */
+  .gear{
+    margin-left:6px; width:30px; height:30px; flex:0 0 auto;
+    display:grid; place-items:center; border:0; cursor:pointer;
+    color:var(--ink-faint); background:transparent; border-radius:50%;
+    opacity:0; transform:scale(.9);
+    transition:opacity .3s ease, color .25s ease, background .25s ease, transform .25s ease;
+  }
+  .pill:hover .gear{ opacity:1; transform:none; }
+  .gear:hover{ color:var(--ink); background:rgba(255,255,255,0.06); }
+  .gear:focus-visible{ outline:2px solid rgba(var(--accent),0.9); outline-offset:2px; opacity:1; }
+
+  /* ------- panneau de reglages ------- */
+  .settings{
+    position:relative; width:344px; max-height:82vh; overflow:hidden;
+    display:flex; flex-direction:column;
+    border-radius:22px; background:var(--glass);
+    -webkit-backdrop-filter:blur(24px) saturate(1.3); backdrop-filter:blur(24px) saturate(1.3);
+    box-shadow:inset 0 0 0 1px var(--hair), inset 0 1px 0 0 rgba(255,255,255,0.05),
+               0 24px 60px -20px rgba(0,0,0,0.85);
+    transition:opacity .4s ease, transform .4s cubic-bezier(.2,.8,.2,1);
+    transform-origin:top right;
+  }
+  .settings.hidden{ opacity:0; transform:scale(.94) translateY(-8px); pointer-events:none; }
+  .set-head{ display:flex; align-items:center; justify-content:space-between;
+    padding:16px 18px 10px; }
+  .set-title{ font-size:15px; font-weight:600; color:var(--ink); }
+  .set-close{ border:0; background:transparent; color:var(--ink-faint); cursor:pointer;
+    font-size:15px; width:26px; height:26px; border-radius:8px; }
+  .set-close:hover{ color:var(--ink); background:rgba(255,255,255,0.06); }
+  .set-body{ padding:4px 18px 10px; overflow-y:auto; display:flex; flex-direction:column; gap:13px; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field > span{ font-size:11px; letter-spacing:.04em; color:var(--ink-faint); text-transform:uppercase; font-weight:600; }
+  .field > span b{ color:var(--ink-soft); float:right; font-weight:600; }
+  .field input[type=text], .field textarea{
+    width:100%; font:inherit; font-size:13.5px; color:var(--ink);
+    background:rgba(255,255,255,0.04); border:1px solid var(--hair); border-radius:10px;
+    padding:9px 11px; resize:vertical;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .field input:focus, .field textarea:focus{
+    outline:none; border-color:rgba(var(--accent),0.8); background:rgba(255,255,255,0.06);
+  }
+  .field input[type=range]{ width:100%; accent-color:rgb(var(--accent)); }
+  .set-note{ font-size:11.5px; color:var(--ink-faint); min-height:14px; }
+  .set-note.ok{ color:rgb(67,224,160); }
+  .set-note.err{ color:rgb(245,120,110); }
+  .set-foot{ display:flex; justify-content:flex-end; gap:10px; padding:12px 18px 16px;
+    border-top:1px solid rgba(255,255,255,0.05); }
+  .btn{ font:inherit; font-size:13.5px; font-weight:550; padding:9px 16px; border-radius:11px;
+    cursor:pointer; border:1px solid transparent; transition:filter .2s ease, background .2s ease; }
+  .btn.ghost{ background:transparent; color:var(--ink-soft); border-color:var(--hair); }
+  .btn.ghost:hover{ background:rgba(255,255,255,0.05); color:var(--ink); }
+  .btn.primary{ background:rgb(var(--accent)); color:#0a0a0c; }
+  .btn.primary:hover{ filter:brightness(1.1); }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.001ms !important; transition-duration:.12s !important; }
+  }
+</style>
+
+<div id="stage">
+  <!-- carte de demarrage (cachee par defaut, affichee via avaBoot) -->
+  <section class="boot hidden" id="boot" aria-hidden="true">
+    <header class="boot-head">
+      <div class="boot-orb"><canvas id="orbBoot"></canvas></div>
+      <div>
+        <div class="boot-title">Ava s'initialise</div>
+        <div class="boot-sub" id="bootSub">Préparation de ton espace…</div>
+      </div>
+    </header>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <!-- pilule d'etat -->
+  <section class="pill hidden" id="pill" role="status" aria-live="polite">
+    <div class="orb-wrap"><canvas id="orbMain" class="orb"></canvas></div>
+    <div class="label">
+      <span class="kicker" id="kicker">Ava</span>
+      <span class="status" id="status">Prête</span>
+    </div>
+    <button class="gear" id="gear" title="Réglages" aria-label="Réglages">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"></path>
+      </svg>
+    </button>
+  </section>
+
+  <!-- panneau de reglages (branche sur le store de config) -->
+  <section class="settings hidden" id="settings" aria-label="Réglages">
+    <header class="set-head">
+      <span class="set-title">Réglages d'Ava</span>
+      <button class="set-close" id="setClose" aria-label="Fermer">✕</button>
+    </header>
+    <div class="set-body" id="setBody">
+      <label class="field"><span>Ton prénom</span>
+        <input id="fName" type="text" placeholder="Ton prénom"></label>
+      <label class="field"><span>Ville (météo)</span>
+        <input id="fCity" type="text" placeholder="Ta ville"></label>
+      <label class="field"><span>Voix ElevenLabs (Voice ID)</span>
+        <input id="fVoice" type="text" placeholder="ex : FGY2WhTYpPnrIDTdsKH5"></label>
+      <label class="field"><span>Sensibilité du clap <b id="fSensVal">50</b></span>
+        <input id="fSens" type="range" min="0" max="100" step="1"></label>
+      <label class="field"><span>Phrases de réveil (une par ligne)</span>
+        <textarea id="fPhrases" rows="2" placeholder="ok ava&#10;bonjour ava"></textarea></label>
+      <label class="field"><span>Apps du réveil (Nom, coin : tl/tr/bl/br)</span>
+        <textarea id="fApps" rows="4" placeholder="Terminal, tl&#10;Notion, bl"></textarea></label>
+      <div class="set-note" id="setNote"></div>
+    </div>
+    <footer class="set-foot">
+      <button class="btn ghost" id="setCancel">Annuler</button>
+      <button class="btn primary" id="setSave">Enregistrer</button>
+    </footer>
+  </section>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---- palette des etats : couleur signature + energie (0..1) + libelles ----
+  const STATES = {
+    idle:      { rgb:[122,134,150], energy:0.16, kicker:"Ava",       status:"Prête" },
+    listening: { rgb:[46,208,224],  energy:0.95, kicker:"À l'écoute", status:"Je t'écoute" },
+    thinking:  { rgb:[139,124,246], energy:0.7,  kicker:"Réflexion",  status:"Un instant", dots:true },
+    speaking:  { rgb:[67,224,160],  energy:0.85, kicker:"Réponse",    status:"" },
+    action:    { rgb:[245,166,35],  energy:0.8,  kicker:"Action",     status:"" },
+  };
+
+  // ================= l'orbe (canvas) =================
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const clamp = (v,a,b)=> v<a?a:v>b?b:v;
+
+  class Orb {
+    constructor(canvas){
+      this.c = canvas; this.ctx = canvas.getContext("2d");
+      this.dpr = Math.min(window.devicePixelRatio||1, 2);
+      this.cur = { rgb:[122,134,150], energy:0.16 };
+      this.tgt = { rgb:[122,134,150], energy:0.16 };
+      this.mode = "idle";
+      this.blobs = Array.from({length:5}, (_,i)=>({
+        a: Math.random()*Math.PI*2,
+        r: 0.24 + Math.random()*0.34,
+        s: (0.4 + Math.random()*0.9) * (i%2?1:-1),
+        sz: 0.34 + Math.random()*0.22,
+      }));
+      this.spin = 0;              // arc de reflexion
+      this.rings = [];            // ondes "sonar" (ecoute)
+      this.sparks = [];           // etincelles (action)
+      this.ringT = 0;             // cadence des ondes
+      this.bloom = 0;             // eclat bref au changement d'etat
+      this.talk = 0;              // phase d'ondulation (parole)
+      this.resize();
+      window.addEventListener("resize", ()=>this.resize());
+    }
+    resize(){
+      const r = this.c.getBoundingClientRect();
+      this.w = Math.max(1, r.width); this.h = Math.max(1, r.height);
+      this.c.width = this.w*this.dpr; this.c.height = this.h*this.dpr;
+      this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+    }
+    set(rgb, energy, mode){
+      this.tgt.rgb = rgb.slice(); this.tgt.energy = energy;
+      if(mode && mode !== this.mode){ this.mode = mode; this.bloom = 1; }  // eclat a la bascule
+    }
+    _lerp(a,b,t){ return a+(b-a)*t; }
+
+    frame(dt, t){
+      const ctx = this.ctx, cx=this.w/2, cy=this.h/2;
+      const CR = Math.min(this.w,this.h)/2;   // rayon du canvas : limite dure a ne jamais depasser
+      const R0 = CR*0.56;                      // sphere plus petite -> de la place pour le halo
+      // transitions douces
+      for(let i=0;i<3;i++) this.cur.rgb[i]=this._lerp(this.cur.rgb[i],this.tgt.rgb[i], 0.07);
+      this.cur.energy = this._lerp(this.cur.energy, this.tgt.energy, 0.06);
+      this.bloom = Math.max(0, this.bloom - dt*0.0022);
+      const e = clamp(this.cur.energy + this.bloom*0.5, 0, 1.3);
+      const [r,g,b] = this.cur.rgb.map(v=>Math.round(v));
+      const lite = k => [Math.min(r+k,255),Math.min(g+k,255),Math.min(b+k,255)];
+
+      ctx.clearRect(0,0,this.w,this.h);
+
+      // respiration ; en "parole" l'orbe ondule plus vite (comme une voix)
+      this.talk += dt*0.006*(this.mode==="speaking"?1:0.35);
+      const wob = this.mode==="speaking" ? Math.sin(this.talk)*0.05 + Math.sin(this.talk*2.3)*0.025 : 0;
+      const breathe = 1 + Math.sin(t*0.0016)*(0.02+0.04*e) + wob + this.bloom*0.05;
+      const R = Math.min(R0*breathe, CR*0.7);   // la sphere ne touche jamais le bord
+
+      // ---- ondes "sonar" a l'ecoute (toujours contenues dans le canvas) ----
+      if(!REDUCED && this.mode==="listening"){
+        this.ringT += dt;
+        if(this.ringT > 700){ this.ringT = 0; this.rings.push({r:R, a:1}); }
+      }
+      for(const ring of this.rings){ ring.r += dt*0.02; ring.a -= dt*0.0016; }
+      this.rings = this.rings.filter(rg2=> rg2.a>0 && rg2.r < CR);
+      for(const ring of this.rings){
+        const fade = clamp(ring.a * (1 - ring.r/CR), 0, 1);   // s'eteint avant le bord
+        ctx.strokeStyle = `rgba(${r},${g},${b},${fade*0.5})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(cx,cy,ring.r,0,7); ctx.stroke();
+      }
+
+      // ---- halo : fond a 0 pile au bord du canvas -> aucune couleur qui deborde ----
+      const glowR = CR;
+      const halo = ctx.createRadialGradient(cx,cy,R*0.6, cx,cy,glowR);
+      halo.addColorStop(0, `rgba(${r},${g},${b},${0.22+0.30*e})`);
+      halo.addColorStop(0.55,`rgba(${r},${g},${b},${0.08+0.12*e})`);
+      halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx,cy,glowR,0,7); ctx.fill();
+
+      // ---- corps de la sphere ----
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx,cy,R,0,7); ctx.clip();
+
+      const base = ctx.createRadialGradient(cx-R*0.3,cy-R*0.36,R*0.1, cx,cy,R*1.12);
+      base.addColorStop(0, `rgb(${(r*0.58)|0},${(g*0.58)|0},${(b*0.60)|0})`);
+      base.addColorStop(1, `rgb(${(r*0.12)|0},${(g*0.12)|0},${(b*0.15)|0})`);
+      ctx.fillStyle = base; ctx.fillRect(cx-R,cy-R,R*2,R*2);
+
+      // blobs lumineux (mouvement liquide) en mode "screen"
+      ctx.globalCompositeOperation = "screen";
+      for(const bl of this.blobs){
+        bl.a += bl.s * dt * (0.0004 + 0.0018*e);
+        const bx = cx + Math.cos(bl.a)*R*bl.r;
+        const by = cy + Math.sin(bl.a*1.3)*R*bl.r;
+        const br = R*bl.sz*(0.8+0.45*e);
+        const [lr,lg,lb] = lite(80);
+        const gg = ctx.createRadialGradient(bx,by,0, bx,by,br);
+        gg.addColorStop(0, `rgba(${lr},${lg},${lb},${0.55*e+0.16})`);
+        gg.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(bx,by,br,0,7); ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+
+      // reflet speculaire + petit point lumineux
+      const spec = ctx.createRadialGradient(cx-R*0.32,cy-R*0.42,0, cx-R*0.32,cy-R*0.42,R*0.95);
+      spec.addColorStop(0,"rgba(255,255,255,0.62)");
+      spec.addColorStop(0.16,"rgba(255,255,255,0.14)");
+      spec.addColorStop(0.5,"rgba(255,255,255,0)");
+      ctx.fillStyle = spec; ctx.fillRect(cx-R,cy-R,R*2,R*2);
+      ctx.restore();
+
+      // liseré (rim light)
+      const [rr,rg,rb] = lite(95);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(${rr},${rg},${rb},${0.38+0.32*e})`;
+      ctx.beginPath(); ctx.arc(cx,cy,R,0,7); ctx.stroke();
+
+      // ---- arc qui tourne pendant la reflexion ----
+      if(!REDUCED && this.mode==="thinking"){
+        this.spin += dt*0.005;
+        const ar = clamp(R + 6, 0, CR - 2);
+        const ag = ctx.createLinearGradient(cx-ar,cy,cx+ar,cy);
+        ag.addColorStop(0, `rgba(${rr},${rg},${rb},0)`);
+        ag.addColorStop(1, `rgba(${rr},${rg},${rb},0.9)`);
+        ctx.strokeStyle = ag; ctx.lineWidth = 2; ctx.lineCap="round";
+        ctx.beginPath(); ctx.arc(cx,cy,ar,this.spin,this.spin+2.1); ctx.stroke();
+        // petit point de tete
+        const hx = cx+Math.cos(this.spin+2.1)*ar, hy = cy+Math.sin(this.spin+2.1)*ar;
+        ctx.fillStyle = `rgba(${rr},${rg},${rb},0.95)`;
+        ctx.beginPath(); ctx.arc(hx,hy,2.2,0,7); ctx.fill();
+      }
+
+      // ---- etincelles quand ava agit ----
+      if(!REDUCED && this.mode==="action" && Math.random()<0.25){
+        const a = Math.random()*Math.PI*2;
+        this.sparks.push({x:cx+Math.cos(a)*R*0.7, y:cy+Math.sin(a)*R*0.7,
+                          vx:Math.cos(a)*0.018, vy:Math.sin(a)*0.018-0.006, life:1});
+      }
+      for(const s of this.sparks){ s.x+=s.vx*dt; s.y+=s.vy*dt; s.life-=dt*0.0018; }
+      this.sparks = this.sparks.filter(s=> s.life>0 && Math.hypot(s.x-cx,s.y-cy) < CR-1);
+      for(const s of this.sparks){
+        ctx.fillStyle = `rgba(${rr},${rg},${rb},${clamp(s.life,0,1)})`;
+        ctx.beginPath(); ctx.arc(s.x,s.y,1.4,0,7); ctx.fill();
+      }
+    }
+  }
+
+  const orbs = [];
+  const mk = id => { const el = document.getElementById(id); if(el){ const o=new Orb(el); orbs.push(o); return o; } return null; };
+  const orbMain = mk("orbMain");
+  const orbBoot = mk("orbBoot");
+
+  let last = performance.now();
+  function loop(now){
+    const dt = Math.min(64, now-last); last = now;
+    for(const o of orbs) o.frame(dt, now);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ================= etat + api =================
+  const pill = document.getElementById("pill");
+  const statusEl = document.getElementById("status");
+  const kickerEl = document.getElementById("kicker");
+  let controlled = false;
+  let startupTimer = null;
+
+  function cancelStartupHint(){
+    if(startupTimer != null){ clearTimeout(startupTimer); startupTimer = null; }
+  }
+
+  function applyAccent(rgb){
+    document.documentElement.style.setProperty("--accent", rgb.join(","));
+  }
+  function setStatusText(txt, dots){
+    statusEl.innerHTML = dots
+      ? (txt ? `${escapeHtml(txt)}<span class="dots"></span>` : `<span class="dots">…</span>`)
+      : escapeHtml(txt||"");
+  }
+  function escapeHtml(s){ return s.replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+  function setState(state, label){
+    cancelStartupHint();
+    const s = STATES[state] || STATES.idle;
+    applyAccent(s.rgb);
+    for(const o of orbs) o.set(s.rgb, s.energy, state);   // <- passe l'etat a l'orbe
+    kickerEl.textContent = s.kicker;
+    setStatusText(label!=null ? label : s.status, !!s.dots);
+    // un etat prioritaire ne doit pas laisser la carte / les reglages ouverts
+    document.getElementById("boot").classList.add("hidden");
+    document.getElementById("settings").classList.add("hidden");
+    pill.classList.remove("hidden");
+  }
+
+  // ---- api exposee au backend python (via evaluate_js) ----
+  function claim(){ controlled = true; }
+  window.avaSetState = (state, label) => { claim(); setState(state, label); };
+  window.avaSay      = (label) => { claim(); setState("speaking", label); };
+  window.avaAction   = (label) => { claim(); setState("action", label); };
+  window.avaIdle     = () => { claim(); setState("idle"); };
+  window.avaShow     = () => { pill.classList.remove("hidden"); };
+  window.avaHide     = () => { pill.classList.add("hidden"); };
+  window.avaStartupHint = (seconds) => {
+    claim();
+    setState("idle", "« Bonjour Ava » ou clap ×2");
+    const delay = Math.max(0, Number(seconds)||0) * 1000;
+    startupTimer = setTimeout(() => {
+      startupTimer = null;
+      pill.classList.add("hidden");
+    }, delay);
+  };
+  // "eteinte au debut" : on cache tout. n'importe quel autre etat reveille.
+  window.avaDormant  = () => { claim(); cancelStartupHint(); pill.classList.add("hidden");
+                               boot.classList.add("hidden");
+                               document.getElementById("settings").classList.add("hidden"); };
+  // l'overlay reel (pywebview) appelle ceci pour rendre le fond transparent
+  window.avaOverlayMode = () => { document.documentElement.classList.add("overlay"); };
+
+  // ---- sequence de demarrage : montre ce qui s'ouvre ----
+  const boot = document.getElementById("boot");
+  const rowsEl = document.getElementById("rows");
+  const bootSub = document.getElementById("bootSub");
+  const CHECK = '<span class="check"><svg viewBox="0 0 12 12" fill="none"><path d="M2.5 6.2l2.2 2.3L9.6 3.6" stroke="rgba('+
+                '255,255,255,0.95)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+
+  window.avaBoot = (apps, sub) => {
+    claim();
+    cancelStartupHint();
+    if(sub) bootSub.textContent = sub;
+    rowsEl.innerHTML = "";
+    (apps||[]).forEach(name=>{
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `<span class="dot"><span class="spin"></span>${CHECK}</span>`+
+                      `<span class="row-name">${escapeHtml(name)}</span>`+
+                      `<span class="row-tag">ouverture</span>`;
+      rowsEl.appendChild(row);
+    });
+    pill.classList.add("hidden");     // la carte de demarrage remplace la pilule
+    boot.classList.remove("hidden");
+    // entree en cascade
+    [...rowsEl.children].forEach((row,i)=> setTimeout(()=>row.classList.add("in"), 90*i+120));
+  };
+  window.avaBootStep = (i) => {
+    const row = rowsEl.children[i]; if(!row) return;
+    row.classList.add("in","done");
+    const tag = row.querySelector(".row-tag"); if(tag) tag.textContent = "prêt";
+  };
+  window.avaBootDone = () => {
+    // on cache juste la carte ; le backend choisit l'etat suivant (ex: speaking)
+    // -> evite d'ecraser l'etat du briefing envoye juste apres par python.
+    boot.classList.add("hidden");
+  };
+
+  // ================= panneau de reglages =================
+  const gear = document.getElementById("gear");
+  const settings = document.getElementById("settings");
+  const setNote = document.getElementById("setNote");
+  const F = {
+    name: document.getElementById("fName"), city: document.getElementById("fCity"),
+    voice: document.getElementById("fVoice"), sens: document.getElementById("fSens"),
+    sensVal: document.getElementById("fSensVal"), phrases: document.getElementById("fPhrases"),
+    apps: document.getElementById("fApps"),
+  };
+  F.sens.addEventListener("input", () => { F.sensVal.textContent = F.sens.value; });
+
+  const hasApi = () => !!(window.pywebview && window.pywebview.api && window.pywebview.api.get_config);
+
+  async function openSettings(){
+    claim();
+    setNote.textContent = ""; setNote.className = "set-note";
+    let cfg = null;
+    if (hasApi()){ try { cfg = await window.pywebview.api.get_config(); } catch(e){ cfg = null; } }
+    if (!cfg || !cfg.identity){
+      cfg = { identity:{name:"Ava",city:"Paris"}, voice:{voice_id:""},
+              wake:{phrases:["ok ava"],clap:{sensitivity:50}},
+              morning:{apps:[{name:"Terminal",position:"tl"},{name:"Notes",position:"bl"}]} };
+      setNote.textContent = "Aperçu — non connecté ici.";
+    }
+    F.name.value = (cfg.identity && cfg.identity.name) || "";
+    F.city.value = (cfg.identity && cfg.identity.city) || "";
+    F.voice.value = (cfg.voice && cfg.voice.voice_id) || "";
+    F.sens.value = (cfg.wake && cfg.wake.clap && cfg.wake.clap.sensitivity != null) ? cfg.wake.clap.sensitivity : 50;
+    F.sensVal.textContent = F.sens.value;
+    F.phrases.value = ((cfg.wake && cfg.wake.phrases) || []).join("\n");
+    F.apps.value = ((cfg.morning && cfg.morning.apps) || []).map(a => `${a.name}, ${a.position}`).join("\n");
+    pill.classList.add("hidden");
+    settings.classList.remove("hidden");
+  }
+
+  function closeSettings(){ settings.classList.add("hidden"); pill.classList.remove("hidden"); }
+
+  async function saveSettings(){
+    const apps = F.apps.value.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+      const i = l.lastIndexOf(",");
+      const name = (i < 0 ? l : l.slice(0, i)).trim();
+      let pos = (i < 0 ? "tl" : l.slice(i + 1)).trim().toLowerCase();
+      if (!["tl","tr","bl","br"].includes(pos)) pos = "tl";
+      return { name, position: pos };
+    });
+    const phrases = F.phrases.value.split("\n").map(s => s.trim().toLowerCase()).filter(Boolean);
+    const patch = {
+      identity: { name: F.name.value.trim(), city: F.city.value.trim() },
+      voice: { voice_id: F.voice.value.trim() },
+      wake: { phrases, clap: { sensitivity: parseInt(F.sens.value, 10) } },
+      morning: { apps },
+    };
+    if (!hasApi()){ setNote.textContent = "Non connecté — lance Ava pour enregistrer."; setNote.className = "set-note err"; return; }
+    try {
+      const res = await window.pywebview.api.save_config(patch);
+      if (res && res.error){ setNote.textContent = "Erreur : " + res.error; setNote.className = "set-note err"; return; }
+      setNote.textContent = "Enregistré ✓"; setNote.className = "set-note ok";
+      setTimeout(closeSettings, 850);
+    } catch(e){ setNote.textContent = "Erreur : " + e; setNote.className = "set-note err"; }
+  }
+
+  gear.addEventListener("click", () => settings.classList.contains("hidden") ? openSettings() : closeSettings());
+  document.getElementById("setClose").addEventListener("click", closeSettings);
+  document.getElementById("setCancel").addEventListener("click", closeSettings);
+  document.getElementById("setSave").addEventListener("click", saveSettings);
+
+  // ================= mode demo (quand ouvert comme page seule) =================
+  // si le backend ne prend pas la main vite, on joue une demo pour voir le rendu.
+  setTimeout(() => {
+    if (controlled) return;
+    const apps = ["Terminal","Promethee 2","Notion","Dia"];
+    window.avaBoot(apps, "Préparation de ton espace…");
+    apps.forEach((_,i)=> setTimeout(()=>window.avaBootStep(i), 700 + i*650));
+    setTimeout(()=>{ boot.classList.add("hidden"); controlled=false; runDemo(); }, 700 + apps.length*650 + 700);
+  }, 900);
+
+  function runDemo(){
+    const script = [
+      ["idle",      null,                         2200],
+      ["listening", "Je t'écoute",                2600],
+      ["thinking",  "Un instant",                 2200],
+      ["action",    "J'ouvre Spotify",            2400],
+      ["speaking",  "Il est 14 heures 32",        2600],
+      ["action",    "Je lance ta recherche",      2400],
+      ["idle",      "Prête",                      2600],
+    ];
+    let i = 0;
+    const tick = () => {
+      if (controlled && i>0) return;         // le backend a repris la main
+      const [st, label, hold] = script[i % script.length];
+      setState(st, label);
+      i++; setTimeout(tick, hold);
+    };
+    tick();
+  }
+})();
+</script>

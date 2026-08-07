@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "identity": {"name": "Ava", "city": "Paris"},
+  "voice": {"voice_id": "", "model_id": "eleven_multilingual_v2", "system_fallback": "Thomas"},
+  "wake": {
+    "phrases": ["bonjour ava", "ok ava"],
+    "clap": {"enabled": true, "sensitivity": 50, "min_gap_ms": 120, "max_gap_ms": 350}
+  },
+  "morning": {
+    "spotify_uri": "",
+    "apps": [
+      {"name": "Terminal", "position": "tl"},
+      {"name": "Safari", "position": "tr"},
+      {"name": "Notes", "position": "bl"},
+      {"name": "Music", "position": "br"}
+    ]
+  },
+  "conversation": {"base_url": "http://127.0.0.1:1234/v1", "model": ""},
+  "computer_use": {"enabled": true, "confirmation_ttl_seconds": 30},
+  "ui": {"start_hidden": true, "startup_hint_seconds": 5}
+}
