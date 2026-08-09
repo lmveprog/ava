@@ -1,181 +1,209 @@
+![Ava](docs/images/hero.png)
+
 # Ava
 
-Ava est une assistante personnelle locale pour macOS : réveil vocal en français,
-commandes clavier ou micro, actions sur le Mac et mini-interface toujours à portée
-de main.
+Ava is a personal assistant that lives in the macOS menu bar. She wakes on
+"bonjour Ava" or a double clap, listens, answers out loud, and can drive the Mac
+— open apps, read and write your calendar, look at what's on screen, search the
+web.
 
-![Le briefing du matin d'Ava](docs/images/briefing.png)
+She speaks French, because that's the language I speak to her in. Everything
+around her — the code, the docs, the tests — is in English.
 
-## Ce qui rend Ava différente
+**She runs on the machine.** The wake word, the transcription, the voice and the
+screen analysis all happen on the Mac's GPU. No key, no quota, nothing said in
+the room leaves the room. That isn't a degraded fallback either — it's the fast
+path:
 
-- **Une extension de la barre de menus**, pas une fenêtre posée sur le bureau :
-  icône en haut à droite à côté des autres, aucune icône dans le Dock, panneau
-  qui tombe pile sous son icône et se referme d'un clic. L'icône change selon ce
-  qu'Ava fait — au repos, elle écoute, elle réfléchit, elle parle.
-- **« Mettre l'écoute en pause » dans le menu** : le micro reste ouvert mais plus
-  rien ne peut la réveiller. Un clic pour la faire taire, un clic pour la
-  reprendre — sans jamais avoir à la tuer.
-- **Elle ne dépend de rien.** La voix et l'oreille tournent sur le GPU du Mac :
-  aucune clé, aucun quota, aucune latence réseau, et rien de ce qui est dit ne
-  quitte la machine. Ce n'est pas un repli dégradé — c'est le chemin **le plus
-  rapide** : « Oui ? » part en **0,065 s** (contre 0,51 s par le réseau), un
-  briefing de 31 s se fabrique en **1,7 s**, et une commande se transcrit en
-  **0,23 s** — huit fois plus vite, et plus juste, que le Whisper local d'avant.
-- **Un seul moteur, pas une pile de replis.** Quatre moteurs enchaînés, c'était
-  quatre timbres possibles pour la même phrase et quatre délais à payer avant
-  d'arriver au dernier. Il en reste **un**, et `say` comme filet.
-- **On peut la couper.** « Stop », le bouton micro ou ⌘. arrêtent la phrase en
-  cours ; à l'écran, ce qui n'a pas été prononcé se grise, pour qu'on ne lise
-  pas une réponse qu'on n'a jamais entendue.
-- **Une coupure réseau ne la fait plus attendre.** Un seul endroit sait si le
-  Mac est en ligne : le premier appel qui échoue coupe court pour tous les
-  autres, et chacun part directement sur son repli local. Wifi présent mais
-  internet absent, la première réponse passe de **20 s à 3 s**, les suivantes à
-  **zéro** — au lieu de payer un timeout complet par phrase, par flux d'actu et
-  par relevé météo.
-- **Elle ne prend pas la télévision pour toi.** Le micro entend la pièce
-  entière : ce qui arrive en trois phrases sans verbe d'action ni question est
-  reconnu comme une conversation d'ambiance, et Ava se tait au lieu d'aller
-  chercher sur le web le nom d'un joueur entendu au passage.
-- **Le grand rituel du matin ne se joue qu'une fois par jour.** Un « bonjour
-  Ava » à 18 h ne relance plus la musique, les applications et 45 s de briefing :
-  elle dit simplement bonsoir et écoute.
-- **Elle apprend tes tournures.** Ce que le routage par mots-clés ne comprend pas
-  part vers un petit modèle qui en déduit l'intention, puis la réponse est
-  gardée sur le disque : la même phrase, la fois d'après, est instantanée et
-  gratuite.
-- **Elle est extensible sans toucher au code.** Ava lit le format ouvert
-  [Agent Skills](https://agentskills.io) : on dépose un dossier avec un
-  `SKILL.md` dans `skills/` (ou `~/Documents/ava-skills`), et elle sait faire.
-  Deux compétences sont livrées — l'état du Mac, et « où j'en suis sur tel
-  projet ». Voir [`skills/README.md`](skills/README.md).
-- **Elle mesure où part son temps.** Chaque interaction laisse une trace — route
-  empruntée, latence, réseau ou non — jamais ce qui a été dit.
-  `doctor.py --traces` sort le tableau.
-- Mini-plugin visible au démarrage, utilisable immédiatement au clavier.
-- Bouton micro sans mot de réveil, plus `Bonjour Ava` et `OK Ava` hors ligne.
-- Capture vocale adaptative au bruit ambiant, pré-roll anti-coupure et détection
-  automatique de fin de phrase.
-- Transcription partielle en direct avec Vosk, puis transcription finale sur le
-  GPU du Mac (Whisper large-v3-turbo via MLX).
-- Confirmations sensibles avec de vrais boutons **Oui / Non**.
-- Réponses illustrées seulement lorsqu’un repère visuel est utile.
-- Orbe fluide dessinée en local, branchée sur les états réels d'Ava.
-- Conversation et exécution locales par défaut.
-- **Voix locale par défaut** : Kokoro (Apache 2.0) sur le GPU du Mac, voix
-  française `ff_siwis`. Mistral, Chatterbox et ElevenLabs restent sélectionnables
-  dans les réglages, mais plus rien n'y retombe automatiquement.
-- **Google Agenda connecté en deux clics** depuis les réglages (OAuth avec PKCE,
-  jetons chiffrés sur le disque). Ava lit ton agenda du jour et **y écrit** :
-  « ajoute un rendez-vous dentiste demain à 14 heures ».
-- Agenda macOS en lecture seule comme repli hors ligne.
-- **Session de focus Prométhée lancée automatiquement** au « bonjour Ava ».
-- Recherche web intégrée : Ava lit la réponse et affiche ses sources sans ouvrir
-  automatiquement un onglet.
-- Calendrier officiel de l'OM pour les prochains matchs, sans réponse mémorisée.
-- Index Spotlight de toutes les applications installées, avec tolérance aux noms
-  mal prononcés et seuil anti-faux-positif.
-- Diagnostic d'écran à la demande via Ollama + Gemma 3 Vision, entièrement local.
-- Conversation vocale continue : après une réponse, Ava écoute directement la
-  demande suivante pendant quelques secondes, sans répéter « OK Ava ».
-- Scène de démarrage animée au centre de l'écran avec prénom, ville, actualité IA
-  récente et sourcée, puis citation entrepreneuriale renouvelée à chaque lancement.
+| | over the network | on the Mac |
+| --- | --- | --- |
+| "oui ?" | 0.51 s | **0.065 s** |
+| a command transcribed | 1.85 s | **0.23 s** |
+| a 31 s briefing, spoken | — | **1.7 s** |
 
-## Installation
+<p align="center">
+  <img src="docs/images/panel.png" width="380" alt="Ava answering a question, with her sources">
+  <img src="docs/images/listening.png" width="380" alt="Ava listening, with the live transcription">
+</p>
 
-Pré-requis : macOS et Python 3.11 ou plus récent. Python 3.12 est recommandé.
+---
+
+## what makes her different
+
+**She's a menu bar extension, not a window sitting on the desktop.** The icon is
+up top next to the others, there's nothing in the Dock, and the panel drops right
+under its icon and closes again with one click. The icon itself changes with what
+she's doing — idle, listening, thinking, speaking.
+
+**You can mute her without killing her.** "Pause listening" in the menu keeps the
+mic open but stops anything from waking her. One click to shut her up, one click
+to bring her back.
+
+**One engine, not a stack of fallbacks.** Four chained engines meant four possible
+timbres for the same sentence and four delays to pay before reaching the last one.
+There's **one** now, with the system `say` as a safety net.
+
+**You can cut her off.** "Stop", the mic button or ⌘. stop the sentence in flight.
+On screen, whatever didn't get spoken goes grey — so you never read an answer you
+never heard.
+
+**A dead network doesn't make her wait.** One place knows whether the Mac is
+online: the first call that fails cuts it short for everyone else, and each one
+goes straight to its local fallback. Wifi up but internet down, the first answer
+went from **20 s to 3 s**, and every one after that to **zero**.
+
+**She doesn't mistake the TV for you.** The mic hears the whole room. Three
+sentences with no action verb and no question read as background conversation,
+and she stays quiet instead of googling the name of a player she overheard.
+
+**The morning ritual only plays once a day.** A "bonjour Ava" at 6 pm no longer
+restarts the music, the apps and 45 s of briefing — she just says good evening
+and listens.
+
+**She learns your turns of phrase.** Whatever keyword routing doesn't catch goes
+to a small model that works out the intent, and the answer is kept on disk: the
+same sentence, next time, is instant and free.
+
+**She's extensible without touching the code.** Ava reads the open
+[Agent Skills](https://agentskills.io) format — drop a folder with a `SKILL.md`
+into `skills/` (or `~/Documents/ava-skills`) and she knows how. Two ship with
+her. See [`skills/README.md`](skills/README.md).
+
+**She measures where her time goes.** Every interaction leaves a trace — route
+taken, latency, network or not, never what was said. `ava-doctor --traces` prints
+the table.
+
+![The morning briefing](docs/images/briefing.png)
+
+---
+
+## anything irreversible asks first
+
+Typing text is reversible, so she just does it. Pressing return, closing a
+window, pasting, clicking a button that says *send*, *pay* or *delete* — those
+stop and ask, with real buttons.
+
+<p align="center">
+  <img src="docs/images/confirm.png" width="420" alt="Ava asking for confirmation before sending">
+</p>
+
+There is no path from arbitrary speech to an arbitrary command: an allowlist
+turns what you said into one of a fixed set of typed intents, or into nothing at
+all. The full picture — what leaves the machine, where the tokens live, how
+skills are sandboxed — is in [SECURITY.md](SECURITY.md).
+
+---
+
+## install
+
+macOS, Apple Silicon, Python 3.11+ (3.12 recommended).
 
 ```bash
-cd /chemin/vers/ava
-python3.12 bootstrap.py
-.venv/bin/python doctor.py
-.venv/bin/python ava.py
+git clone https://github.com/lmveprog/ava.git
+cd ava
+make install          # or: python3 bootstrap.py
+make doctor           # checks libraries, model, mic, permissions
+make run
 ```
 
-Le bootstrap installe les dépendances dans `.venv` et récupère le modèle français
-Vosk officiel. Il ne modifie pas le Python global.
+`bootstrap.py` creates a `.venv`, installs Ava into it in editable mode, and
+downloads the French Vosk model (about 41 MB, checked against its SHA-256). It
+never touches your system Python. Afterwards you have two commands:
 
-Au premier lancement, macOS peut demander plusieurs permissions, uniquement au
-moment où la fonction correspondante est utilisée :
+```bash
+.venv/bin/ava           # start her
+.venv/bin/ava-doctor    # 30-odd checks, in colour
+```
 
-- **Microphone** pour la voix ;
-- **Accessibilité** pour cliquer, écrire ou piloter une fenêtre ;
-- **Automatisation → Calendar** pour lire les rendez-vous ;
-- **Automatisation → Promethee** pour ouvrir une session de focus ;
-- **Enregistrement de l'écran et audio système** pour le diagnostic visuel.
+macOS asks for permissions the first time each feature is used, never at startup:
+**microphone**, **accessibility** (to type and click), **screen recording** (for
+the screen diagnosis), and **automation** for Calendar and Promethee.
 
-Pour l'analyse d'écran locale, installe et lance
-[Ollama](https://ollama.com/) avec un modèle vision. Ava détecte automatiquement
-`gemma3`, `qwen3-vl`, `llama3.2-vision` ou `llava` :
+For the local screen analysis, install [Ollama](https://ollama.com/) with a
+vision model — Ava picks up `gemma3`, `qwen3-vl`, `llama3.2-vision` or `llava`
+on her own:
 
 ```bash
 ollama pull gemma3:12b
 ```
 
-## Utilisation
+Optional, both off by default: `MISTRAL_API_KEY` in `.env` switches
+transcription to Voxtral, `ELEVENLABS_API_KEY` switches the voice to ElevenLabs.
+Copy `.env.example` to `.env` if you want either. Everything else — city, voice,
+wake phrases, apps, Google account — lives in the settings panel behind the gear
+icon, and is written to `config.json` (mode `0600`, never committed).
 
-- Écris directement dans le mini-plugin puis appuie sur Entrée.
-- Clique sur le micro et parle naturellement.
-- Dis `OK Ava, ouvre Spotify` pour une commande complète.
-- Dis `Bonjour Ava` ou fais un double clap pour le rituel du matin.
-- Le rituel reprend le dernier contexte Spotify en lecture aléatoire et passe à
-  un nouveau morceau. Une URI Spotify peut aussi imposer une playlist précise.
-- Demande `Ouvre mon agenda et dis-moi ce qui est prévu aujourd'hui`.
-- Demande `Quand est le prochain match de l'OM ?`.
-- Demande `Ouvre WhatsApp`, `ouvre Xcode` ou n'importe quelle app installée.
-- Affiche une erreur puis demande `Quel est ce problème ?` : Ava masque son
-  panneau, capture l'écran, montre la miniature capturée et l'analyse localement.
-- Demande `Recherche les nouveautés de Python` pour une réponse avec sources.
+---
 
-Après chaque réponse vocale, le statut devient **Tu peux enchaîner** : parle tout de
-suite. Un silence ferme naturellement la session ; dis `stop`, `c'est bon` ou
-`merci Ava` pour la terminer explicitement. Le comportement et l'animation de départ
-peuvent être désactivés dans les réglages du mini-plugin.
+## using her
 
-Les réglages de ville, voix, phrases de réveil, applications et préférences visuelles
-sont accessibles via l’icône en haut à droite.
+- Type into the panel and press enter.
+- Click the mic and talk.
+- Say `OK Ava, ouvre Spotify` for a full command.
+- Say `Bonjour Ava` or double clap for the morning ritual.
+- `Ouvre mon agenda et dis-moi ce qui est prévu aujourd'hui`.
+- `Ajoute un rendez-vous dentiste demain à 14 heures` — she writes to Google
+  Calendar, not just reads it.
+- `Ouvre WhatsApp`, `ouvre Xcode`, or any installed app: she indexes them from
+  Spotlight and tolerates a mangled pronunciation.
+- Leave an error on screen and ask `Quel est ce problème ?` — she hides her
+  panel, captures the screen, shows you the thumbnail, and reads it locally.
+- `Recherche les nouveautés de Python` for an answer with its sources.
 
-## Diagnostic et tests
+After each spoken answer the status becomes **"tu peux enchaîner"** — just keep
+talking. Silence closes the session; `stop`, `c'est bon` or `merci Ava` ends it
+outright.
 
-```bash
-.venv/bin/python doctor.py
-.venv/bin/python -m unittest discover -s tests -v
+![The five states of the orb](docs/images/states.png)
+
+---
+
+## how it's put together
+
+```
+src/ava/
+  app.py          the loop: wake word, routing, ritual
+  paths.py        the one place that knows where anything is written
+  config.py       validated settings, saved atomically at 0600
+  audio/          wake_words.py (vosk) · voice_tts.py (kokoro, chatterbox)
+  brain/          conversation.py · understanding.py · skills.py
+  mac/            computer_use.py · app_catalog.py · screen_vision.py · promethee.py
+  services/       google_auth.py · google_calendar.py · ai_news.py · web_research.py
+  ui/             overlay.py · menubar.py · web/ava.html
 ```
 
-`doctor.py` vérifie les bibliothèques, le modèle vocal, le micro, Ollama, le modèle
-vision, l'état du réseau et les permissions macOS. La suite couvre aussi Calendar, la
-source officielle OM, l'index d'applications, la vision locale et les cartes de sources.
-
-`tests/test_smoke_phrases.py` fait passer une cinquantaine de tournures réelles
-dans le routage et vérifie la **route** prise, pas la phrase rendue : c'est ainsi
-qu'ont été trouvés les cas où « précédent », « salut Ava » ou « qu'est-ce que
-j'ai aujourd'hui » finissaient en recherche web. Pour éprouver le comportement
-hors ligne sans couper le wifi, on pointe l'API vers un trou noir
-(`https://10.255.255.1`) : la connexion expire sans jamais être refusée, ce qui
-reproduit le cas d'un réseau présent mais mort.
-
-## Confidentialité
-
-Le wake word Vosk, Faster Whisper, Ollama et l'analyse des captures restent locaux.
-Ava ne prend une capture que lorsque la demande l'indique explicitement, ne déclenche
-aucune action depuis le texte lu à l'écran et conserve l'image dans `~/Pictures/Ava`.
-Une recherche envoie seulement la requête à DuckDuckGo ou à la source officielle
-concernée. Une clé Mistral active Voxtral pour la transcription finale ; une clé
-ElevenLabs envoie le texte de la réponse à ElevenLabs pour la voix Laura. Sans ces
-clés, Ava garde ses fallbacks locaux et la voix système macOS.
-
-## Principes d'architecture
-
-Ava sépare les outils déterministes (Calendar, ouverture d'app, actions autorisées)
-des réponses générées. Les actions sensibles demandent confirmation, les sources et
-captures sont visibles dans le panneau, et une sortie de modèle visuel ne peut jamais
-agir directement sur le Mac. Ces principes reprennent les meilleurs patterns observés
-dans [Vibe Buddy](https://github.com/edouardfoussier/hackathon-mistral-vibe),
+Deterministic tools (Calendar, opening an app, allowed actions) are kept apart
+from generated answers. Sensitive actions ask. Sources and captures are visible
+in the panel. A vision model's output can never act on the Mac. Those principles
+are borrowed from
+[Vibe Buddy](https://github.com/edouardfoussier/hackathon-mistral-vibe),
 [Open Interpreter](https://github.com/OpenInterpreter/open-interpreter),
-[Leon](https://github.com/leon-ai/leon) et [Cua](https://github.com/trycua/cua).
+[Leon](https://github.com/leon-ai/leon) and [Cua](https://github.com/trycua/cua).
 
-## Crédits
+Everything Ava writes — config, tokens, caches, models — lands next to the
+checkout, so `git pull` never touches your settings and deleting the folder
+deletes the lot. Set `AVA_HOME` to keep it elsewhere.
 
-L’animation optionnelle est [AI Orb Mascot par aln.omrv](https://rive.app/community/files/28088-53050-ai-orb-mascot/),
-adaptée sous licence CC BY 4.0. Les détails sont dans
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## tests
+
+```bash
+make test         # 344 tests, about 3 seconds
+```
+
+`tests/test_smoke_phrases.py` runs fifty-odd real phrasings through the router
+and checks the **route** taken, not the sentence produced — that's how the cases
+where "précédent", "salut Ava" or "qu'est-ce que j'ai aujourd'hui" all ended up
+in a web search were found. To exercise the offline behaviour without unplugging
+the wifi, the API is pointed at a black hole (`https://10.255.255.1`): the
+connection times out without ever being refused, which is exactly what a network
+that's up but dead looks like.
+
+CI runs the suite on macOS against Python 3.11 and 3.12 on every push.
+
+## credits
+
+The orb is drawn locally on a canvas — the panel loads no remote asset at all.
+The skills format, the Vosk model and the ideas borrowed from OpenJarvis are
+credited in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+MIT licensed.

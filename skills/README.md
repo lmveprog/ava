@@ -1,62 +1,64 @@
-# Les compétences d'Ava
+# Ava's skills
 
-Une compétence apprend quelque chose à Ava **sans toucher à `ava.py`**. On dépose
-un dossier ici, elle sait faire.
+A skill teaches Ava something **without touching `app.py`**. Drop a folder in
+here and she knows how.
 
-Le format est le standard ouvert [Agent Skills](https://agentskills.io), le même
-que celui utilisé par OpenJarvis et par la plupart des agents récents.
+The format is the open [Agent Skills](https://agentskills.io) standard, the same
+one OpenJarvis and most recent agents use.
 
-## Écrire une compétence en deux minutes
+## writing one, in two minutes
 
 ```
-skills/ma-competence/
-  SKILL.md              obligatoire
-  scripts/faire.py      facultatif
+skills/my-skill/
+  SKILL.md              required
+  scripts/do-it.py      optional
 ```
 
-`SKILL.md` :
+`SKILL.md`:
 
 ```markdown
 ---
-name: ma-competence
-description: Ce que ça fait, et surtout QUAND s'en servir. C'est la seule chose
-  qu'Ava lit pour décider — écris-la comme tu l'expliquerais à quelqu'un.
-command: scripts/faire.py
+name: my-skill
+description: What it does, and above all WHEN to use it. This is the only thing
+  Ava reads when deciding — write it the way you'd explain it to a person.
+command: scripts/do-it.py
 ---
 
-# Ma compétence
+# My skill
 
-Les instructions détaillées. Ava ne les lit **que** si la demande correspond.
+The detailed instructions. Ava reads these **only** if the request matches.
 ```
 
-## Les deux façons de répondre
+## the two ways of answering
 
-- **Avec un script** (`command:`) — Ava le lance, la demande arrive en argument,
-  et elle dit à voix haute ce que le script écrit sur la sortie standard. C'est
-  le plus fiable : le script décide, rien n'est inventé.
-- **Sans script** — les instructions du `SKILL.md` servent de consigne au moteur
-  de discussion, qui rédige la réponse.
+- **With a script** (`command:`) — Ava runs it, the request arrives as an
+  argument, and she says out loud whatever the script writes to stdout. This is
+  the reliable one: the script decides, nothing is made up.
+- **Without a script** — the `SKILL.md` body becomes the brief for the
+  conversation engine, which writes the answer.
 
-## Ce qu'il faut savoir
+## what to keep in mind
 
-- **La description fait tout.** Ava ne connaît que le nom et la description au
-  moment de choisir (c'est la « divulgation progressive » du standard : le corps
-  n'est lu qu'à l'activation). Une description vague = une compétence qui ne se
-  déclenche jamais.
-- **Écris pour l'oreille.** La sortie est prononcée. Pas de sigles, pas de `Go`
-  ni de `%` : « gigaoctets », « pour cent ». Et des accents partout, sinon la
-  synthèse écorche les mots.
-- **Un script reste dans son dossier.** Un `command:` qui pointe ailleurs est
-  refusé, et l'exécution est coupée au bout de 45 secondes.
-- **Ava exécute ce que tu déposes ici.** N'y mets que des scripts que tu as lus.
-  Le tout se coupe d'un coup avec `skills.enabled: false` dans `config.json`.
+- **The description does all the work.** When choosing, Ava knows nothing but
+  the name and the description — that's the standard's progressive disclosure,
+  the body is only read on activation. A vague description means a skill that
+  never fires.
+- **Write the description in the language you speak to her.** It gets matched
+  against what you actually said, so the two shipped skills are in French like
+  the rest of what Ava hears and says.
+- **Write for the ear.** The output gets spoken. No abbreviations, no `GB` or
+  `%`: "gigaoctets", "pour cent". And keep the accents on, or the synthesiser
+  mangles the words.
+- **A script stays in its own folder.** A `command:` pointing anywhere else is
+  refused, and execution is killed after 45 seconds.
+- **Ava runs whatever you put here.** Only put scripts you've read. The whole
+  mechanism switches off with `"skills": {"enabled": false}` in `config.json`.
 
-Un dossier personnel est également lu : `~/Documents/ava-skills`. En cas de même
-nom, c'est lui qui gagne — pratique pour remplacer une compétence livrée sans
-modifier le dépôt.
+A personal folder is read too: `~/Documents/ava-skills`. On a name clash it
+wins — handy for replacing a bundled skill without editing the repo.
 
-## Vérifier
+## checking
 
 ```bash
-.venv/bin/python doctor.py | grep competence
+.venv/bin/ava-doctor | grep competence
 ```

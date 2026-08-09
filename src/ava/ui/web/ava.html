@@ -147,10 +147,10 @@
       filter:blur(calc(10px + var(--level)*8px));transform:scale(calc(1 + var(--level)*.18));
       transition:background .35s ease,transform .08s linear;
     }
-    #riveOrb,.fallback-orb{position:absolute;inset:0;width:66px;height:66px}
-    #riveOrb{z-index:2;opacity:0;transition:opacity .3s ease}
-    #riveOrb.ready{opacity:1}
-    .avatar.rive-ready .fallback-orb{opacity:0}
+    #orbCanvas,.fallback-orb{position:absolute;inset:0;width:66px;height:66px}
+    #orbCanvas{z-index:2;opacity:0;transition:opacity .3s ease}
+    #orbCanvas.ready{opacity:1}
+    .avatar.orb-ready .fallback-orb{opacity:0}
     .fallback-orb{
       border-radius:50%;overflow:hidden;transition:opacity .25s ease,transform .12s ease;
       transform:scale(calc(1 + var(--level)*.07));
@@ -342,7 +342,7 @@
     <header class="topbar">
       <div class="avatar" id="avatar" aria-hidden="true">
         <div class="fallback-orb"></div>
-        <canvas id="riveOrb" width="132" height="132"></canvas>
+        <canvas id="orbCanvas" width="132" height="132"></canvas>
       </div>
       <div class="identity">
         <div class="eyebrow"><span class="state-dot"></span><span id="kicker">Ava</span></div>
@@ -450,7 +450,7 @@
       booting:{rgb:[255,177,82],kicker:"Démarrage",status:"Je prépare ton espace",sub:"Quelques secondes…"},
       error:{rgb:[255,105,126],kicker:"Petit souci",status:"Je n’ai pas pu terminer",sub:"Réessaie ou écris la demande"}
     };
-    let currentState="idle",showIllustrations=true,riveInstance=null,riveVM=null,startupTimer=null,startupSourceUrl="";
+    let currentState="idle",showIllustrations=true,orbAnimation=null,orbState=null,startupTimer=null,startupSourceUrl="";
 
     function setAccent(rgb){document.documentElement.style.setProperty("--accent",rgb.join(","))}
     function setState(name,label){
@@ -594,8 +594,8 @@
     $("composer").addEventListener("submit",event=>{event.preventDefault();submitText(input.value)});
     input.addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();submitText(input.value)}});
     function resizeInput(){input.style.height="auto";input.style.height=Math.min(78,input.scrollHeight)+"px"}
-    input.addEventListener("input",()=>{resizeInput();send.disabled=!input.value.trim();setRiveBool("typingBoolean",!!input.value.trim())});
-    input.addEventListener("blur",()=>{if(currentState==="idle")setRiveBool("typingBoolean",false)});
+    input.addEventListener("input",()=>{resizeInput();send.disabled=!input.value.trim();setOrbFlag("typingBoolean",!!input.value.trim())});
+    input.addEventListener("blur",()=>{if(currentState==="idle")setOrbFlag("typingBoolean",false)});
     mic.addEventListener("click",async()=>{
       if(!hasApi("start_listening")){addError("Lance Ava pour activer le micro.");return}
       setState("listening");
@@ -610,15 +610,15 @@
     $("startupSource").addEventListener("click",()=>{if(!startupSourceUrl)return;if(hasApi("open_external"))window.pywebview.api.open_external(startupSourceUrl);else window.open(startupSourceUrl,"_blank")});
 
     // ----- Rive : AI Orb Mascot par aln.omrv, pilotee par les vrais etats Ava.
-    function setRiveBool(name,value){try{const p=riveVM&&riveVM.boolean(name);if(p)p.value=!!value}catch(_){}}
-    function fireRive(name){try{const p=riveVM&&riveVM.trigger(name);if(p)p.trigger()}catch(_){}}
+    function setOrbFlag(name,value){try{const p=orbState&&orbState.boolean(name);if(p)p.value=!!value}catch(_){}}
+    function fireOrb(name){try{const p=orbState&&orbState.trigger(name);if(p)p.trigger()}catch(_){}}
     function syncRive(){
-      if(!riveVM)return;
-      setRiveBool("typingBoolean",currentState==="listening"||document.activeElement===input&&!!input.value);
-      setRiveBool("loadingBoolean",currentState==="thinking");
-      if(currentState==="speaking")fireRive("correct");
-      else if(currentState==="error")fireRive("wrong");
-      else if(currentState==="action"||currentState==="booting")fireRive("jump");
+      if(!orbState)return;
+      setOrbFlag("typingBoolean",currentState==="listening"||document.activeElement===input&&!!input.value);
+      setOrbFlag("loadingBoolean",currentState==="thinking");
+      if(currentState==="speaking")fireOrb("correct");
+      else if(currentState==="error")fireOrb("wrong");
+      else if(currentState==="action"||currentState==="booting")fireOrb("jump");
     }
     function initStartupVoiceOrb(){
       const canvas=$("startupVoiceOrb"),ctx=canvas&&canvas.getContext("2d");if(!ctx)return;
@@ -666,7 +666,7 @@
     // orbe fluide du topbar : meme rendu liquide que l'ecran d'accueil, colore
     // par l'etat courant. remplace la mascotte Rive (cartoon) par le "bel orbe".
     function initAvatarOrb(){
-      const canvas=$("riveOrb"),ctx=canvas&&canvas.getContext("2d");if(!ctx)return;
+      const canvas=$("orbCanvas"),ctx=canvas&&canvas.getContext("2d");if(!ctx)return;
       const reduceMotion=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const PAL={
         idle:["#46d9df","#7a68ed","#275fbd"],listening:["#4ae0bc","#37cfe2","#6b7dff"],
@@ -711,7 +711,7 @@
         ctx.fillStyle=shade;ctx.fillRect(0,0,w,h);ctx.restore();
         ctx.save();ctx.strokeStyle=colors[0]+"99";ctx.lineWidth=1;ctx.stroke(shape);ctx.restore();
       }
-      $("riveOrb").classList.add("ready");$("avatar").classList.add("rive-ready");
+      $("orbCanvas").classList.add("ready");$("avatar").classList.add("orb-ready");
       requestAnimationFrame(draw);
     }
     window.addEventListener("load",()=>{initAvatarOrb();initStartupVoiceOrb()});
