@@ -5,11 +5,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import requests
 
-import net
+from ava import net as net
 
 
 class FakeClock:
@@ -144,7 +144,7 @@ class WiringTest(unittest.TestCase):
         self.addCleanup(net.reset)
 
     def test_la_voix_ne_rappelle_pas_le_reseau_une_fois_hors_ligne(self):
-        import voice_tts
+        from ava.audio import voice_tts as voice_tts
         net.note_failure("voix", requests.ConnectionError("boum"))
         with mock.patch.object(voice_tts, "_mistral_chunk") as chunk:
             self.assertIsNone(voice_tts._mistral_audio("une phrase jamais dite"))
@@ -157,7 +157,7 @@ class WiringTest(unittest.TestCase):
         pas de repli du tout : la voix systeme repond tout de suite pendant que
         le modele monte derriere.
         """
-        import voice_tts
+        from ava.audio import voice_tts as voice_tts
         net.note_failure("voix", requests.ConnectionError("boum"))
         with mock.patch.object(voice_tts, "_mistral_audio", return_value=None), \
                 mock.patch.object(voice_tts, "local_voice_ready", return_value=False), \
@@ -170,7 +170,7 @@ class WiringTest(unittest.TestCase):
         warm.assert_called_once()          # mais on le monte pour la suite
 
     def test_une_fois_chaud_le_modele_local_reprend_la_main(self):
-        import voice_tts
+        from ava.audio import voice_tts as voice_tts
         from pathlib import Path as P
         net.note_failure("voix", requests.ConnectionError("boum"))
         with mock.patch.object(voice_tts, "_mistral_audio", return_value=None), \
@@ -182,14 +182,14 @@ class WiringTest(unittest.TestCase):
         local.assert_called_once()
 
     def test_l_actu_rend_la_main_tout_de_suite(self):
-        import ai_news
+        from ava.services import ai_news as ai_news
         net.note_failure("actu", requests.ConnectionError("boum"))
         with mock.patch.object(ai_news, "_feed_items") as feed:
             self.assertEqual(ai_news.fetch_items(), [])
         feed.assert_not_called()
 
     def test_la_recherche_web_rend_zero_source(self):
-        import web_research
+        from ava.services import web_research as web_research
         net.note_failure("recherche", requests.ConnectionError("boum"))
         engine = web_research.WebResearch()
         with mock.patch.object(engine.session, "get") as get:
@@ -197,7 +197,7 @@ class WiringTest(unittest.TestCase):
         get.assert_not_called()
 
     def test_l_agenda_le_dit_au_lieu_d_attendre(self):
-        import google_calendar
+        from ava.services import google_calendar as google_calendar
         net.note_failure("agenda", requests.ConnectionError("boum"))
         calendar = google_calendar.GoogleCalendar()
         with mock.patch.object(google_calendar.requests, "request") as request:
@@ -211,7 +211,7 @@ class WiringTest(unittest.TestCase):
         Les mettre derriere le coupe-circuit reviendrait a couper ava de son
         moteur *local* parce que la box a saute — exactement l'inverse du but.
         """
-        import conversation
+        from ava.brain import conversation as conversation
         net.note_failure("voix", requests.ConnectionError("boum"))
         engine = conversation.LocalConversationEngine()
         reply = {"choices": [{"message": {"content": "bonjour"}}]}
@@ -233,7 +233,7 @@ class UnderstandingCacheTest(unittest.TestCase):
         self.addCleanup(net.reset)
 
     def test_une_tournure_apprise_marche_hors_ligne(self):
-        import understanding
+        from ava.brain import understanding as understanding
         router = understanding.IntentRouter(cache_path=Path("/nonexistent/intents.json"))
         appris = understanding.Understanding("musique_suivant", confidence=0.95)
         router._cache["balance la suite"] = appris

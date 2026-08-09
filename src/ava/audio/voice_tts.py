@@ -39,11 +39,11 @@ import subprocess
 import threading
 import time
 
-import net
+from ava import paths
+from ava import net as net
 
-HERE = Path(__file__).resolve().parent
-CACHE_DIR = HERE / ".cache" / "ava_welcome"
-DEFAULT_REFERENCE = HERE / "voices" / "laura_ref.wav"
+CACHE_DIR = paths.cache_dir("ava_welcome")
+DEFAULT_REFERENCE = paths.VOICES_DIR / "reference.wav"
 
 ENGINES = ("kokoro", "mistral", "chatterbox", "elevenlabs", "system")
 DEFAULT_ENGINE = "chatterbox"
@@ -68,7 +68,7 @@ _model_error = ""
 
 def _settings() -> dict:
     try:
-        from ava_config import STORE
+        from ava.config import STORE
         return STORE.snapshot().get("voice", {})
     except Exception:  # noqa: BLE001
         return {}
@@ -80,9 +80,20 @@ def engine_name() -> str:
 
 
 def reference_path() -> Path | None:
+    """The voice clip chatterbox clones, if there is one.
+
+    Reference clips are personal — mine is not in the repo and yours shouldn't
+    be either. Drop any wav in `voices/` and it gets picked up; name it
+    `reference.wav` if you keep several.
+    """
     raw = str(_settings().get("reference", "")).strip()
-    path = Path(raw).expanduser() if raw else DEFAULT_REFERENCE
-    return path if path.is_file() else None
+    if raw:
+        path = Path(raw).expanduser()
+        return path if path.is_file() else None
+    if DEFAULT_REFERENCE.is_file():
+        return DEFAULT_REFERENCE
+    clips = sorted(paths.VOICES_DIR.glob("*.wav")) if paths.VOICES_DIR.is_dir() else []
+    return clips[0] if clips else None
 
 
 def _params() -> tuple[float, float, float]:

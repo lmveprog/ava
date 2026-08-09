@@ -13,8 +13,8 @@ import re
 
 import requests
 
-from google_auth import AUTH
-import net
+from ava.services.google_auth import AUTH
+from ava import net as net
 
 API = "https://www.googleapis.com/calendar/v3"
 

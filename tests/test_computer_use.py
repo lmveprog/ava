@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from computer_use import (
+from ava.mac.computer_use import (
     ActionOutcome,
     ComputerUseEngine,
     MacComputerController,
@@ -56,7 +56,7 @@ class ComputerUseTests(unittest.TestCase):
     def test_missing_accessibility_permission_is_explained(self):
         controller = MacComputerController()
         intent = parse_computer_intent("écris bonjour")
-        with patch("computer_use.sys.platform", "darwin"), \
+        with patch("ava.mac.computer_use.sys.platform", "darwin"), \
                 patch.object(controller, "accessibility_enabled", return_value=False):
             outcome = controller.execute(intent)
         self.assertFalse(outcome.ok)

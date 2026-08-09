@@ -10,6 +10,8 @@ import threading
 from typing import Any, Callable
 import urllib.parse
 
+from ava import paths
+
 
 # les voix francaises du tts mistral : « marie » est la seule fr_FR du
 # catalogue, declinee en six humeurs. tout le reste est anglophone, donc
@@ -350,4 +352,4 @@ class ConfigStore:
         return clap_min_rms(sensitivity)
 
 
-STORE = ConfigStore(Path(__file__).with_name("config.json"))
+STORE = ConfigStore(paths.CONFIG_FILE)

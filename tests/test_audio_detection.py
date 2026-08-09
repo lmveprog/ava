@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-import ava as jarvis
+from ava import app as jarvis
 
 
 class AudioDetectionTests(unittest.TestCase):

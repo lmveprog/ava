@@ -15,18 +15,19 @@ import sys
 
 import requests
 
-HERE = Path(__file__).resolve().parent
+
 
 # sans ca, le diagnostic annoncait les cles absentes alors qu'ava, elle, les
 # lisait tres bien : c'est le genre de faux negatif qui envoie chercher une
 # panne la ou il n'y en a pas.
 try:
     from dotenv import load_dotenv
-    load_dotenv(HERE / ".env")
+    load_dotenv(paths.ENV_FILE)
 except Exception:  # noqa: BLE001
     pass
 
-from ava_config import STORE  # noqa: E402
+from ava import paths
+from ava.config import STORE  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -83,13 +84,13 @@ def run_checks() -> list[Check]:
             required=False,
         ))
 
-    model = HERE / "models" / "vosk-model-small-fr-0.22"
+    model = paths.MODELS_DIR / "vosk-model-small-fr-0.22"
     checks.append(Check(
         "modele:vosk-fr", "ok" if model.is_dir() else "error",
         str(model) if model.is_dir() else "modele absent — lance python3 bootstrap.py",
     ))
 
-    overlay = HERE / "overlay" / "ava.html"
+    overlay = paths.OVERLAY_HTML
     checks.append(Check(
         "overlay", "ok" if overlay.is_file() else "error",
         str(overlay) if overlay.is_file() else "overlay/ava.html absent",
@@ -102,7 +103,7 @@ def run_checks() -> list[Check]:
     ))
 
     env_text = ""
-    env_path = HERE / ".env"
+    env_path = paths.ENV_FILE
     if env_path.exists():
         try:
             env_text = env_path.read_text(encoding="utf-8")
@@ -197,7 +198,7 @@ def _voice_checks() -> list[Check]:
         checks.append(Check("voix:calcul", "error", str(exc)[:90]))
 
     try:
-        import voice_tts
+        from ava.audio import voice_tts as voice_tts
         reference = voice_tts.reference_path()
         checks.append(Check(
             "voix:reference", "ok" if reference else "warning",
@@ -243,7 +244,7 @@ def _mistral_voice_checks(voice: dict) -> list[Check]:
     ))
 
     timbre = str(voice.get("mistral_voice", "")).strip()
-    from ava_config import MISTRAL_VOICES
+    from ava.config import MISTRAL_VOICES
     checks.append(Check(
         "voix:timbre", "ok" if timbre in MISTRAL_VOICES else "warning",
         timbre or "aucun -> fr_marie_neutral par defaut", required=False,
@@ -279,7 +280,7 @@ def _mistral_voice_checks(voice: dict) -> list[Check]:
 def _skills_checks() -> list[Check]:
     """Les competences installees, au format Agent Skills."""
     checks: list[Check] = []
-    import skills
+    from ava.brain import skills as skills
     enabled = STORE.snapshot().get("skills", {}).get("enabled", True)
     installed = skills.discover() if enabled else []
     checks.append(Check(
@@ -304,7 +305,7 @@ def _skills_checks() -> list[Check]:
 def _understanding_checks() -> list[Check]:
     """Le routeur d'intentions : facultatif, mais on veut savoir s'il repond."""
     checks: list[Check] = []
-    import understanding
+    from ava.brain import understanding as understanding
     checks.append(Check("comprehension:modele", "ok", understanding.MODEL, required=False))
     checks.append(Check(
         "comprehension:cle", "ok" if understanding.api_key() else "warning",
@@ -325,7 +326,7 @@ def _network_checks() -> list[Check]:
     coupe-circuit ils payaient chacun leur timeout complet, soit plusieurs
     minutes de silence sur un simple wifi en rade — d'ou ce controle.
     """
-    import net
+    from ava import net as net
     state = net.status()
     checks = [Check(
         "reseau:etat", "ok" if state["online"] else "warning",
@@ -355,7 +356,7 @@ def _network_checks() -> list[Check]:
 def _google_checks() -> list[Check]:
     """Le connecteur agenda echoue en silence quand un maillon manque."""
     try:
-        from google_auth import AUTH
+        from ava.services.google_auth import AUTH
         status = AUTH.status()
     except Exception as exc:  # noqa: BLE001
         return [Check("google:agenda", "warning", str(exc)[:90], required=False)]
@@ -373,7 +374,7 @@ def _google_checks() -> list[Check]:
     # ava semble connectee et repond "je n'arrive pas a lire ton agenda".
     try:
         import json as _json
-        from google_auth import TOKEN_PATH
+        from ava.services.google_auth import TOKEN_PATH
         granted = _json.loads(TOKEN_PATH.read_text(encoding="utf-8")).get("scope", "")
     except Exception:  # noqa: BLE001
         granted = ""
@@ -420,7 +421,7 @@ def main() -> int:
         for check in checks:
             print(f"{icons[check.status]} {check.name:<24} {check.detail}")
         if args.traces:
-            import traces
+            from ava import traces as traces
             print("\n— temps par route —")
             print(traces.report("commande"))
             print("\n— fabrication de la voix —")

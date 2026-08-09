@@ -3,12 +3,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import ava as jarvis
-from computer_use import ActionOutcome, ComputerIntent
-from conversation import ConversationReply
-from google_calendar import GoogleEvent
-from screen_vision import VisionReply
-from web_research import ResearchReply, Source
+from ava import app as jarvis
+from ava.mac.computer_use import ActionOutcome, ComputerIntent
+from ava.brain.conversation import ConversationReply
+from ava.services.google_calendar import GoogleEvent
+from ava.mac.screen_vision import VisionReply
+from ava.services.web_research import ResearchReply, Source
 
 
 def _event(title: str, start: dt.datetime, minutes: int = 60) -> GoogleEvent:

@@ -22,10 +22,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import ava
-import voice_tts as V
+from ava import app as ava
+from ava.audio import voice_tts as V
 
 
 class SingleEngineTest(unittest.TestCase):
@@ -137,9 +137,9 @@ class OverlayContractTest(unittest.TestCase):
     """Le pont python -> js doit rester complet des deux cotes."""
 
     def test_l_interruption_existe_de_bout_en_bout(self):
-        import overlay
+        from ava.ui import overlay as overlay
         self.assertTrue(hasattr(overlay, "interrupted"))
-        page = (Path(__file__).resolve().parents[1] / "overlay" / "ava.html").read_text(
+        page = (Path(__file__).resolve().parents[1] / "src" / "ava" / "ui" / "web" / "ava.html").read_text(
             encoding="utf-8")
         self.assertIn("window.avaInterrupted", page)
         # ce qui n'a pas ete prononce doit se distinguer de ce qui l'a ete.

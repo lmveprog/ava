@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import ava  # noqa: E402
+from ava import app as ava  # noqa: E402
 
 
 class RitualOncePerDayTests(unittest.TestCase):

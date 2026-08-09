@@ -20,8 +20,9 @@ from pathlib import Path
 import random
 import threading
 
-HERE = Path(__file__).resolve().parent
-HISTORY_PATH = HERE / ".cache" / "quotes_seen.json"
+from ava import paths
+
+HISTORY_PATH = paths.cache_dir("quotes_seen.json")
 
 # on garde en memoire les dernieres citations dites, pour ne pas tourner en
 # rond sur trois formules quand ava est relancee plusieurs fois par jour.
@@ -148,7 +149,7 @@ def daily() -> Quote:
     return quote
 
 
-TODAY_PATH = HERE / ".cache" / "quote_today.json"
+TODAY_PATH = paths.cache_dir("quote_today.json")
 
 _today: dict = {"day": None, "quote": None}
 _today_lock = threading.Lock()

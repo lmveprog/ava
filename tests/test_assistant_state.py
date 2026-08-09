@@ -1,6 +1,6 @@
 import unittest
 
-from assistant_state import AssistantStateMachine, AvaState, InvalidTransition
+from ava.state import AssistantStateMachine, AvaState, InvalidTransition
 
 
 class AssistantStateTests(unittest.TestCase):

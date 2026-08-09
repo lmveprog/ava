@@ -13,11 +13,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import ava
-import net
-from conversation import ConversationReply
+from ava import app as ava
+from ava import net as net
+from ava.brain.conversation import ConversationReply
 
 
 class RoutingGapsTest(unittest.TestCase):
@@ -147,7 +147,7 @@ class AgendaSentenceTest(unittest.TestCase):
 
     def sentence(self, hours):
         import datetime as dt
-        from google_calendar import GoogleEvent
+        from ava.services.google_calendar import GoogleEvent
         # demain : tout est « a venir » quelle que soit l'heure du test.
         base = dt.datetime.now() + dt.timedelta(days=1)
         events = tuple(
@@ -266,8 +266,8 @@ class SpokenAccentsTest(unittest.TestCase):
                 "C'est note", "enregistree", "a ete arretee", "de l'ecran",
                 "termine deja")
 
-    FILES = ("ava.py", "computer_use.py", "web_research.py",
-             "google_calendar.py", "skills.py")
+    FILES = ("app.py", "mac/computer_use.py", "services/web_research.py",
+             "services/google_calendar.py", "brain/skills.py")
 
     @classmethod
     def spoken_lines(cls, root: Path):
@@ -287,7 +287,7 @@ class SpokenAccentsTest(unittest.TestCase):
                 for suspect in self.SUSPECTS if suspect in line]
 
     def test_aucune_phrase_parlee_sans_accent(self):
-        root = Path(__file__).resolve().parents[1]
+        root = Path(__file__).resolve().parents[1] / "src" / "ava"
         self.assertEqual(self.offenders(root), [])
 
     def test_le_garde_fou_attrape_bien_une_regression(self):
@@ -296,8 +296,9 @@ class SpokenAccentsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             for name in self.FILES:
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
                 (root / name).write_text("", encoding="utf-8")
-            (root / "ava.py").write_text('    speak("C\'est note.")\n', encoding="utf-8")
+            (root / "app.py").write_text('    speak("C\'est note.")\n', encoding="utf-8")
             self.assertTrue(self.offenders(root))
 
 

@@ -31,29 +31,29 @@ import numpy as np
 import requests
 import sounddevice as sd
 
-from assistant_state import AssistantStateMachine, AvaState, InvalidTransition
-from app_catalog import AppCatalog
-from ava_config import STORE as CONFIG, clap_min_rms
-from calendar_tools import MacCalendar
-from computer_use import ComputerUseEngine, parse_computer_intent
-from conversation import LocalConversationEngine
-import google_calendar
-from instance_lock import SingleInstanceLock
-import net
-import promethee
-import ai_news
-import quotes
-from screen_vision import ScreenVision
-import skills
-import traces
-from understanding import ROUTER as INTENT_ROUTER
-import voice_tts
-from wake_words import (PartialWakeGate, extract_wake, normalize_speech,
+from ava import paths
+from ava.state import AssistantStateMachine, AvaState, InvalidTransition
+from ava.mac.app_catalog import AppCatalog
+from ava.config import STORE as CONFIG, clap_min_rms
+from ava.services.calendar_tools import MacCalendar
+from ava.mac.computer_use import ComputerUseEngine, parse_computer_intent
+from ava.brain.conversation import LocalConversationEngine
+from ava.services import google_calendar as google_calendar
+from ava.instance_lock import SingleInstanceLock
+from ava import net as net
+from ava.mac import promethee as promethee
+from ava.services import ai_news as ai_news
+from ava.services import quotes as quotes
+from ava.mac.screen_vision import ScreenVision
+from ava.brain import skills as skills
+from ava import traces as traces
+from ava.brain.understanding import ROUTER as INTENT_ROUTER
+from ava.audio import voice_tts as voice_tts
+from ava.audio.wake_words import (PartialWakeGate, extract_wake, normalize_speech,
                         strip_wake_prefix, strip_wake_suffix)
-from web_research import ResearchReply, WebResearch
+from ava.services.web_research import ResearchReply, WebResearch
 
-HERE = Path(__file__).resolve().parent
-load_dotenv(HERE / ".env")
+load_dotenv(paths.ENV_FILE)
 SETTINGS = CONFIG.snapshot()
 
 # --- reglages ---------------------------------------------------------------
@@ -478,20 +478,20 @@ def build_welcome_text() -> str:
                      "Bon travail !")
     return " ".join(parts)
 
-CACHE_DIR = HERE / ".cache" / "ava_welcome"
-INSTANCE_LOCK = SingleInstanceLock(HERE / ".cache" / "ava.lock")
+CACHE_DIR = paths.cache_dir("ava_welcome")
+INSTANCE_LOCK = SingleInstanceLock(paths.cache_dir("ava.lock"))
 
 # --- overlay visuel (fenetre orbe en haut a droite) -------------------------
 OVERLAY_ENABLED = os.getenv("AVA_OVERLAY", os.getenv("JARVIS_OVERLAY", "1")).strip().lower() not in (
     "0", "false", "no", "off")
 try:
-    import overlay as _overlay
+    from ava.ui import overlay as _overlay
 except Exception:                       # pywebview absent ?
     _overlay = None
     OVERLAY_ENABLED = False
 
 try:
-    from menubar import MENU_BAR, quit_ava
+    from ava.ui.menubar import MENU_BAR, quit_ava
 except Exception:                       # hors macos : pas de barre de menus
     MENU_BAR = None
     quit_ava = None
@@ -943,7 +943,7 @@ def trigger_welcome(source: str) -> None:
 # on garde donc UN seul flux (celui du clap, a 48000 hz) et on lui repique
 # l'audio : on le reechantillonne a 16000 hz pour vosk et on le pousse dans
 # cette file. le clap et "ok ava" partagent ainsi le meme micro.
-WAKE_MODEL_DIR = HERE / "models" / "vosk-model-small-fr-0.22"
+WAKE_MODEL_DIR = paths.MODELS_DIR / "vosk-model-small-fr-0.22"
 WAKE_SR = 16000
 WAKE_ENABLED = WAKE_MODEL_DIR.exists()
 _wake_q: queue.Queue = queue.Queue(maxsize=800)
@@ -2962,7 +2962,7 @@ def main() -> None:
             ).start()
         threading.Thread(target=run_audio, daemon=True).start()
         try:
-            _overlay.start(str(HERE / "overlay" / "ava.html"))
+            _overlay.start(str(paths.OVERLAY_HTML))
             # la fenetre s'est fermee (bug gui, etc.) : ava ne doit PAS mourir
             # pour autant — l'ecoute continue sans interface.
             print("[overlay] fenetre fermee -> ava continue sans interface")

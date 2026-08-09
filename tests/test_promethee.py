@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import promethee  # noqa: E402
+from ava.mac import promethee as promethee  # noqa: E402
 
 
 def _make_db(path: Path, rows) -> None:

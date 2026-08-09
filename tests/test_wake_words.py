@@ -1,6 +1,6 @@
 import unittest
 
-from wake_words import PartialWakeGate, extract_wake
+from ava.audio.wake_words import PartialWakeGate, extract_wake
 
 
 class WakeWordTests(unittest.TestCase):

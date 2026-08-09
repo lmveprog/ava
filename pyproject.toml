@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ava-assistant"
+version = "0.2.0"
+description = "a local voice assistant for macos"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "lmveprog" }]
+keywords = ["voice assistant", "macos", "speech", "local", "mlx"]
+classifiers = [
+    "Environment :: MacOS X",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "sounddevice>=0.4.6,<0.6",
+    "websockets>=13",
+    "python-dotenv>=1.0,<2",
+    "requests>=2.28",
+    "PyYAML>=6.0",
+    "vosk>=0.3.44",
+    "pywebview>=5.0",
+    "openwakeword>=0.6",
+    "onnxruntime>=1.16",
+    "pyobjc-framework-ApplicationServices>=10",
+    # the voice and the ear, both on the mac's gpu (mlx). this is the default
+    # path: nothing leaves the machine, nothing runs out of quota.
+    #   kokoro 82M in 4 bits    "oui ?" in 0.065 s, a 31 s briefing in 1.70 s
+    #   whisper large-v3-turbo  3.5 s of speech transcribed in 0.23 s
+    "mlx-audio>=0.4",
+    "mlx-whisper>=0.4",
+    # kokoro's french g2p goes through espeak: without espeak-ng (brew) and
+    # these two, kokoro speaks english beautifully and french not at all.
+    "misaki>=0.7",
+    "espeakng-loader>=0.2",
+]
+
+[project.optional-dependencies]
+# selectable in the settings panel, never fallen back to automatically.
+extras = [
+    "faster-whisper>=1.0",  # for macs without apple silicon
+    "elevenlabs>=1.50,<3",
+]
+
+[project.scripts]
+ava = "ava.app:main"
+ava-doctor = "ava.doctor:main"
+
+[project.urls]
+Homepage = "https://github.com/lmveprog/ava"
+Issues = "https://github.com/lmveprog/ava/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ava = ["ui/web/*.html"]

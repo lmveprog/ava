@@ -31,11 +31,11 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-import net
+from ava import paths
+from ava import net as net
 
-HERE = Path(__file__).resolve().parent
-CACHE_PATH = HERE / ".cache" / "ai_news.json"
-TRANSLATIONS_PATH = HERE / ".cache" / "ai_news_titles.json"
+CACHE_PATH = paths.cache_dir("ai_news.json")
+TRANSLATIONS_PATH = paths.cache_dir("ai_news_titles.json")
 
 USER_AGENT = "Mozilla/5.0 Ava/1.0"
 ATOM = "{http://www.w3.org/2005/Atom}"

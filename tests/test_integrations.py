@@ -6,10 +6,10 @@ import unittest
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
-from app_catalog import AppCatalog
-from calendar_tools import MacCalendar
-from screen_vision import ScreenVision
-from web_research import WebResearch
+from ava.mac.app_catalog import AppCatalog
+from ava.services.calendar_tools import MacCalendar
+from ava.mac.screen_vision import ScreenVision
+from ava.services.web_research import WebResearch
 
 
 class _Response:
@@ -31,7 +31,7 @@ class IntegrationUnitTests(unittest.TestCase):
             {"title": "Anniversaire", "start": "2026-08-06T22:00:00Z", "end": "2026-08-07T22:00:00Z", "calendar": "Perso", "location": "", "allDay": True},
         ]
         result = Mock(returncode=0, stdout=json.dumps(payload), stderr="")
-        with patch("calendar_tools.sys.platform", "darwin"), patch("calendar_tools.subprocess.run", return_value=result):
+        with patch("ava.services.calendar_tools.sys.platform", "darwin"), patch("ava.services.calendar_tools.subprocess.run", return_value=result):
             reply = MacCalendar().summary(0)
         self.assertTrue(reply.available)
         self.assertIn("2 rendez-vous", reply.text)
@@ -72,7 +72,7 @@ class IntegrationUnitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             engine = ScreenVision(Path(directory))
             failed = Mock(returncode=1, stdout="", stderr="permission denied")
-            with patch("screen_vision.subprocess.run", return_value=failed):
+            with patch("ava.mac.screen_vision.subprocess.run", return_value=failed):
                 reply = engine.capture_and_analyze("quel est le problème")
         self.assertFalse(reply.available)
         self.assertIn("Enregistrement de l'écran", reply.text)

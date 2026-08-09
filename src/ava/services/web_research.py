@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-import net
+from ava import net as net
 
 
 @dataclass(frozen=True)

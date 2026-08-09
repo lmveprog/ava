@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from instance_lock import SingleInstanceLock
+from ava.instance_lock import SingleInstanceLock
 
 
 class InstanceLockTests(unittest.TestCase):

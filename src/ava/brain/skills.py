@@ -37,13 +37,14 @@ from pathlib import Path
 import re
 import subprocess
 
-HERE = Path(__file__).resolve().parent
+from ava import paths
+
 
 # les competences livrees avec ava, puis celles de l'utilisateur. le dossier
 # personnel gagne en cas de meme nom : on peut donc remplacer une competition
 # fournie sans modifier le depot.
-BUILTIN_DIR = HERE / "skills"
-USER_DIR = Path.home() / "Documents" / "ava-skills"
+BUILTIN_DIR = paths.BUILTIN_SKILLS_DIR
+USER_DIR = paths.USER_SKILLS_DIR
 
 MAX_INSTRUCTIONS_CHARS = 12000
 SCRIPT_TIMEOUT_S = 45

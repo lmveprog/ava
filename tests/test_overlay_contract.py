@@ -2,10 +2,10 @@ from pathlib import Path
 import unittest
 from unittest.mock import MagicMock, patch
 
-import overlay
+from ava.ui import overlay as overlay
 
 
-HTML = Path(__file__).parents[1] / "overlay" / "ava.html"
+HTML = Path(__file__).parents[1] / "src" / "ava" / "ui" / "web" / "ava.html"
 
 
 class OverlayContractTests(unittest.TestCase):
@@ -78,7 +78,7 @@ class OrbGeometryTests(unittest.TestCase):
     """L'orbe se faisait trancher au carre par le bord de son canvas."""
 
     def setUp(self):
-        self.html = (Path(__file__).resolve().parents[1] / "overlay" / "ava.html").read_text(encoding="utf-8")
+        self.html = (Path(__file__).resolve().parents[1] / "src" / "ava" / "ui" / "web" / "ava.html").read_text(encoding="utf-8")
 
     def test_the_startup_orb_scales_with_its_canvas(self):
         # l'echelle doit venir du canvas, plus de rayons en pixels durs.
@@ -106,7 +106,7 @@ class VoicePreviewTests(unittest.TestCase):
 
     def test_it_returns_before_the_synthesis_finishes(self):
         started = []
-        with patch("ava_config.STORE") as store, \
+        with patch("ava.config.STORE") as store, \
                 patch("threading.Thread") as thread:
             thread.side_effect = lambda target, daemon: started.append(target) or MagicMock()
             result = overlay._Api().test_voice({"engine": "chatterbox"})
@@ -115,13 +115,13 @@ class VoicePreviewTests(unittest.TestCase):
         store.update.assert_called_once_with({"voice": {"engine": "chatterbox"}})
 
     def test_a_broken_engine_is_reported_not_raised(self):
-        with patch("ava_config.STORE") as store:
+        with patch("ava.config.STORE") as store:
             store.update.side_effect = RuntimeError("config cassée")
             result = overlay._Api().test_voice({"engine": "chatterbox"})
         self.assertFalse(result["started"])
         self.assertIn("cassée", result["error"])
 
     def test_the_button_and_its_handler_exist(self):
-        html = (Path(__file__).resolve().parents[1] / "overlay" / "ava.html").read_text(encoding="utf-8")
+        html = (Path(__file__).resolve().parents[1] / "src" / "ava" / "ui" / "web" / "ava.html").read_text(encoding="utf-8")
         self.assertIn('id="voiceTest"', html)
         self.assertIn("api.test_voice(", html)

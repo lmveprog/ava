@@ -28,7 +28,8 @@ import time
 
 import requests
 
-import net
+from ava import paths
+from ava import net as net
 
 MODEL = os.getenv("AVA_NLU_MODEL", "ministral-8b-latest").strip()
 BASE_URL = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1").strip()
@@ -148,7 +149,7 @@ def api_key() -> str:
     return os.getenv("MISTRAL_API_KEY", "").strip()
 
 
-CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "intents.json"
+CACHE_PATH = paths.cache_dir("intents.json")
 CACHE_MAX_ENTRIES = 500
 
 

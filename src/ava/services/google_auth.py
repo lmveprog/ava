@@ -27,6 +27,8 @@ import urllib.parse
 
 import requests
 
+from ava import paths
+
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
@@ -39,7 +41,7 @@ SCOPES = (
     "email",
 )
 
-TOKEN_PATH = Path(__file__).resolve().parent / ".cache" / "google_token.json"
+TOKEN_PATH = paths.cache_dir("google_token.json")
 CONNECT_TIMEOUT_S = 300
 
 
@@ -107,7 +109,7 @@ class GoogleAuth:
         """client id/secret, depuis config.json puis .env en repli."""
         client_id = client_secret = ""
         try:
-            from ava_config import STORE
+            from ava.config import STORE
             google = STORE.snapshot().get("google", {})
             client_id = str(google.get("client_id", "")).strip()
             client_secret = str(google.get("client_secret", "")).strip()

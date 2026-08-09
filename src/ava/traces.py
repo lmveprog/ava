@@ -23,8 +23,9 @@ from pathlib import Path
 import threading
 import time
 
-HERE = Path(__file__).resolve().parent
-TRACE_PATH = HERE / ".cache" / "traces.jsonl"
+from ava import paths
+
+TRACE_PATH = paths.cache_dir("traces.jsonl")
 
 # au-dela, on repart d'un fichier neuf : une ligne fait ~90 octets, donc 20 000
 # lignes tiennent largement l'historique utile sans jamais peser.

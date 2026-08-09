@@ -35,7 +35,7 @@ import socket
 import threading
 import time
 
-import traces
+from ava import traces as traces
 
 # se connecter a un hote joignable prend quelques dizaines de millisecondes ;
 # au-dela de trois secondes, ca ne se connectera pas. la lecture, elle, a le

@@ -45,14 +45,14 @@ class _Api:
 
     def get_config(self):
         try:
-            from ava_config import STORE
+            from ava.config import STORE
             return STORE.snapshot()
         except Exception:
             return {}
 
     def save_config(self, patch):
         try:
-            from ava_config import STORE
+            from ava.config import STORE
             return STORE.update(patch or {})
         except Exception as exc:  # noqa: BLE001
             return {"error": str(exc)}
@@ -84,21 +84,21 @@ class _Api:
 
     def google_status(self):
         try:
-            from google_auth import AUTH
+            from ava.services.google_auth import AUTH
             return AUTH.status()
         except Exception as exc:  # noqa: BLE001
             return {"configured": False, "connected": False, "error": str(exc)}
 
     def google_connect(self):
         try:
-            from google_auth import AUTH
+            from ava.services.google_auth import AUTH
             return AUTH.begin_connect()
         except Exception as exc:  # noqa: BLE001
             return {"started": False, "error": str(exc)}
 
     def google_disconnect(self):
         try:
-            from google_auth import AUTH
+            from ava.services.google_auth import AUTH
             return AUTH.disconnect()
         except Exception as exc:  # noqa: BLE001
             return {"connected": False, "error": str(exc)}
@@ -110,12 +110,12 @@ class _Api:
         et le panneau ne doit pas se figer pendant ce temps.
         """
         try:
-            from ava_config import STORE
+            from ava.config import STORE
             if isinstance(voice, dict):
                 STORE.update({"voice": voice})
 
             def play():
-                import voice_tts
+                from ava.audio import voice_tts as voice_tts
                 sample = ("Bonjour Mathieu, c'est Ava. Voilà à quoi je ressemble "
                           "avec ces réglages.")
                 path = voice_tts.synthesize(sample)
@@ -212,7 +212,7 @@ def _layout_origin(
 def _menu_bar_anchor():
     """Le cadre de l'icone d'ava, si la barre de menus est bien installee."""
     try:
-        from menubar import MENU_BAR
+        from ava.ui.menubar import MENU_BAR
         return MENU_BAR.anchor()
     except Exception:  # noqa: BLE001 - sans barre de menus on garde le coin
         return None
@@ -301,7 +301,7 @@ def start(html_path: str) -> None:
     # avant toute fenetre : ava doit deja etre une extension. bascule apres
     # coup, cocoa masquerait la fenetre qu'on vient de creer.
     try:
-        from menubar import set_accessory_policy
+        from ava.ui.menubar import set_accessory_policy
         set_accessory_policy()
     except Exception:  # noqa: BLE001 - hors macos on continue sans
         pass
@@ -371,7 +371,7 @@ def start(html_path: str) -> None:
         start_hidden = False
         ui_settings = {}
         try:
-            from ava_config import STORE
+            from ava.config import STORE
             ui_settings = STORE.snapshot().get("ui", {})
             start_hidden = bool(ui_settings.get("start_hidden"))
         except Exception:

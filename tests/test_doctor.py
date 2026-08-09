@@ -3,9 +3,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import doctor  # noqa: E402
+from ava import doctor as doctor  # noqa: E402
 
 
 class GoogleCheckTests(unittest.TestCase):
@@ -16,7 +16,7 @@ class GoogleCheckTests(unittest.TestCase):
         return {check.name: check for check in checks}
 
     def test_a_token_without_the_calendar_scope_is_an_error(self):
-        from google_auth import AUTH
+        from ava.services.google_auth import AUTH
         with patch.object(AUTH, "status", return_value={
                 "configured": True, "connected": True, "email": "moi@gmail.com"}), \
                 patch.object(Path, "read_text",
@@ -26,7 +26,7 @@ class GoogleCheckTests(unittest.TestCase):
         self.assertIn("Calendar", checks["google:scope"].detail)
 
     def test_a_complete_token_passes(self):
-        from google_auth import AUTH
+        from ava.services.google_auth import AUTH
         with patch.object(AUTH, "status", return_value={
                 "configured": True, "connected": True, "email": "moi@gmail.com"}), \
                 patch.object(Path, "read_text",
@@ -35,13 +35,13 @@ class GoogleCheckTests(unittest.TestCase):
         self.assertEqual(checks["google:scope"].status, "ok")
 
     def test_no_credentials_is_only_a_warning(self):
-        from google_auth import AUTH
+        from ava.services.google_auth import AUTH
         with patch.object(AUTH, "status", return_value={"configured": False, "connected": False}):
             checks = self._statuses(doctor._google_checks())
         self.assertEqual(checks["google:agenda"].status, "warning")
 
     def test_a_broken_connector_never_crashes_the_doctor(self):
-        from google_auth import AUTH
+        from ava.services.google_auth import AUTH
         with patch.object(AUTH, "status", side_effect=RuntimeError("boum")):
             checks = self._statuses(doctor._google_checks())
         self.assertEqual(checks["google:agenda"].status, "warning")

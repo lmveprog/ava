@@ -4,11 +4,11 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import menubar  # noqa: E402
-import overlay  # noqa: E402
-from assistant_state import AvaState  # noqa: E402
+from ava.ui import menubar as menubar  # noqa: E402
+from ava.ui import overlay as overlay  # noqa: E402
+from ava.state import AvaState  # noqa: E402
 
 
 class IconTests(unittest.TestCase):

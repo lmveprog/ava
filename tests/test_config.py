@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from ava_config import ConfigStore, clap_min_rms, normalize_config
+from ava.config import ConfigStore, clap_min_rms, normalize_config
 
 
 class ConfigTests(unittest.TestCase):

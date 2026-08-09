@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, Mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import ai_news  # noqa: E402
+from ava.services import ai_news as ai_news  # noqa: E402
 
 
 def item(title, source="OpenAI", hours=1.0):
@@ -119,7 +119,7 @@ class TranslationTests(unittest.TestCase):
         self.assertIn("publie", dit)
 
     def test_hors_ligne_le_titre_brut_vaut_mieux_que_rien(self):
-        import net
+        from ava import net as net
         net.note_failure("actu:traduction", ConnectionError("coupé"))
         self.addCleanup(net.reset)
         with patch.object(ai_news.requests, "post") as post:

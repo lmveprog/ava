@@ -10,7 +10,7 @@ import urllib.parse
 
 import requests
 
-import net
+from ava import net as net
 
 
 SYSTEM_PROMPT = """Tu es Ava, l'assistante personnelle de l'utilisateur sur son Mac.
