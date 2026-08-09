@@ -1,14 +1,14 @@
-"""les citations du briefing.
+"""the quotes in the briefing.
 
-avant : une trentaine de formules anonymes du genre « crois en toi et tout
-devient possible », piochees par `jour_de_l_annee % 30`. deux consequences —
-elles sonnaient creux parce que personne ne les avait dites, et l'ordre etant
-fixe, la meme revenait a date fixe.
+before: thirty-odd anonymous lines along the lines of "believe in yourself and
+anything is possible", picked by `day_of_year % 30`. two consequences — they
+rang hollow because nobody had actually said them, and with a fixed order the
+same one came back on the same date every year.
 
-ici, chaque citation a **un auteur**, et la rotation evite ce qui vient d'etre
-dit. l'attribution est le point delicat : la moitie des citations qui circulent
-sont mal attribuees. on s'en tient donc a des lignes dont l'origine est
-documentee, quitte a avoir une liste plus courte. dans le doute, on retire.
+here every quote has **an author**, and the rotation avoids whatever was just
+said. attribution is the delicate part: half the quotes in circulation are
+misattributed. so we stick to lines whose origin is documented, even if that
+makes for a shorter list. when in doubt, it comes out.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from ava import paths
 
 HISTORY_PATH = paths.cache_dir("quotes_seen.json")
 
-# on garde en memoire les dernieres citations dites, pour ne pas tourner en
-# rond sur trois formules quand ava est relancee plusieurs fois par jour.
+# remember the last few quotes said, so she doesn't cycle through the same
+# three when ava gets restarted several times in a day.
 HISTORY_SIZE = 12
 
 
@@ -35,19 +35,19 @@ class Quote:
     author: str
 
     def spoken(self) -> str:
-        """Version parlee. Accents obligatoires : la synthese s'etrangle sans."""
+        """The spoken form. Accents are mandatory — synthesis chokes without."""
         text = self.text.rstrip()
         if not text.endswith((".", "!", "?", "…")):
             text += "."
         return f"{text} {self.author}."
 
 
-# ⚠️ « Et pour la route, cette phrase de X : … » revenait **mot pour mot** tous
-# les matins. Une citation differente annoncee par la meme formule finit par
-# s'entendre comme un jingle : on n'ecoute plus la phrase, on reconnait
-# l'emballage. Les amorces tournent donc avec le jour, et l'auteur passe
-# **apres** la citation — c'est la phrase qu'on veut entendre en premier, pas
-# le nom propre, qui coupe l'elan quand il arrive en tete.
+# ⚠️ "Et pour la route, cette phrase de X : …" came back **word for word** every
+# morning. A different quote announced by the same formula ends up sounding like
+# a jingle: you stop hearing the line and start recognising the wrapper. So the
+# openers rotate with the day, and the author comes **after** the quote — the
+# sentence is what you want to hear first, not the proper noun, which kills the
+# momentum when it leads.
 _QUOTE_INTROS = (
     "Et pour finir, {author} disait :",
     "Une phrase pour la route, de {author} :",
@@ -58,19 +58,18 @@ _QUOTE_INTROS = (
 
 
 def spoken_intro(quote: "Quote", day: int | None = None) -> str:
-    """La citation annoncee, avec une amorce qui change d'un jour a l'autre."""
+    """The quote, announced with an opener that changes from day to day."""
     import datetime
     index = (datetime.date.today().toordinal() if day is None else int(day)) % len(_QUOTE_INTROS)
     text = quote.text.rstrip().rstrip(".")
     return f"{_QUOTE_INTROS[index].format(author=quote.author)} {text}."
 
 
-# --- le fonds ----------------------------------------------------------------
-# volontairement resserre sur des citations verifiables. celles dont
-# l'attribution est contestee (le « un objectif sans plan » de Saint-Exupery, le
-# « nous sommes ce que nous faisons de facon repetee » d'Aristote qui est en
-# realite de Will Durant, la « chance = preparation + opportunite » de Seneque)
-# ont ete ecartees plutot que reattribuees au petit bonheur.
+# --- the collection ----------------------------------------------------------
+# deliberately narrowed to quotes that check out. the ones whose attribution is
+# disputed (Saint-Exupéry's "a goal without a plan", the Aristotle "we are what
+# we repeatedly do" that is really Will Durant, Seneca's "luck = preparation +
+# opportunity") were dropped rather than reassigned on a hunch.
 QUOTES = (
     Quote("Ce n'est pas parce que les choses sont difficiles que nous n'osons pas ; "
           "c'est parce que nous n'osons pas qu'elles sont difficiles", "Sénèque"),
@@ -135,7 +134,7 @@ def _remember(text: str) -> None:
 
 
 def pick(pool=QUOTES, history: list[str] | None = None, chooser=None) -> Quote:
-    """Une citation qui n'a pas ete dite recemment."""
+    """A quote that hasn't come up recently."""
     seen = set(_load_history() if history is None else history)
     candidates = [quote for quote in pool if quote.text not in seen] or list(pool)
     choose = chooser or random.SystemRandom().choice
@@ -143,7 +142,7 @@ def pick(pool=QUOTES, history: list[str] | None = None, chooser=None) -> Quote:
 
 
 def daily() -> Quote:
-    """Pioche une citation et la note comme dite. Reserve aux cas ponctuels."""
+    """Pick a quote and mark it as said. For one-off uses only."""
     quote = pick()
     _remember(quote.text)
     return quote
@@ -179,14 +178,13 @@ def _save_today(day: str, quote: Quote) -> None:
 
 
 def of_the_day(day: str | None = None) -> Quote:
-    """**La** citation du jour : la meme du matin au soir.
+    """**The** quote of the day: the same one from morning to night.
 
-    Trois raisons de ne pas repiocher a chaque appel. Le briefing est refabrique
-    toutes les 15 minutes (`keep_welcome_warm`), donc avec `daily()` la
-    « citation du jour » changeait quatre fois par heure. La scene de demarrage
-    et le texte parle piochaient chacun de leur cote, si bien que l'ecran
-    affichait une citation et qu'Ava en prononcait une autre. Et le choix est
-    garde sur le disque, sinon un simple redemarrage en changeait encore.
+    Three reasons not to re-draw on every call. The briefing is rebuilt every 15
+    minutes (`keep_welcome_warm`), so with `daily()` the "quote of the day"
+    changed four times an hour. The startup scene and the spoken text each drew
+    their own, so the screen showed one quote while Ava said another. And the
+    choice is kept on disk, or a plain restart would change it again.
     """
     today = day or datetime.date.today().isoformat()
     with _today_lock:

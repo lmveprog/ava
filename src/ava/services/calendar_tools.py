@@ -1,4 +1,4 @@
-"""Lecture seule de Calendar.app pour les briefings d'Ava."""
+"""read-only access to calendar.app, for ava's briefings."""
 
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ for (const calendar of Calendar.calendars()) {
       {endDate: {_greaterThan: start}}
     ]})();
   } catch (_) {
-    // Certains comptes Calendar refusent les filtres whose. Le repli reste
-    // borne pour ne jamais aspirer tout un historique ancien.
+    // some calendar accounts refuse whose() filters. the fallback stays
+    // bounded so we never hoover up an entire old history.
     events = calendar.events().slice(0, 500);
   }
   for (const event of events) {
@@ -77,7 +77,7 @@ def _clean(value: object, limit: int = 180) -> str:
 
 
 class MacCalendar:
-    """Expose uniquement les rendez-vous visibles, sans création ni édition."""
+    """Exposes the visible events and nothing else — no creating, no editing."""
 
     def __init__(self, timeout_s: float = 12) -> None:
         self.timeout_s = timeout_s
@@ -93,7 +93,7 @@ class MacCalendar:
 
     def events_for_day(self, day_offset: int = 0) -> tuple[CalendarEvent, ...]:
         if sys.platform != "darwin":
-            raise RuntimeError("Calendar est disponible uniquement sur macOS")
+            raise RuntimeError("Calendar is only available on macOS")
         offset = max(-7, min(365, int(day_offset)))
         script = _JXA.replace("__DAY_OFFSET__", str(offset))
         result = subprocess.run(
@@ -102,11 +102,11 @@ class MacCalendar:
         )
         if result.returncode != 0:
             detail = _clean(result.stderr or result.stdout, 400)
-            raise RuntimeError(detail or "Calendar n'a pas autorise la lecture")
+            raise RuntimeError(detail or "Calendar did not allow reading")
         try:
             payload = json.loads(result.stdout.strip() or "[]")
         except json.JSONDecodeError as exc:
-            raise RuntimeError("Reponse Calendar illisible") from exc
+            raise RuntimeError("unreadable Calendar response") from exc
 
         events: list[CalendarEvent] = []
         for item in payload if isinstance(payload, list) else []:

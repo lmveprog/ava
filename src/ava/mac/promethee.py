@@ -1,10 +1,10 @@
-"""lance une session de focus dans promethee depuis ava.
+"""starting a focus session in promethee, from ava.
 
-promethee est une app electron sans cli ni url scheme utile (seul
-promethee://auth/callback existe), donc on passe par l'accessibilite macos :
-on force chromium a exposer son arbre ax, on retrouve le bouton "lancer la
-session" et on l'active. c'est bien plus fiable qu'un clic aux coordonnees,
-la fenetre pouvant etre sur n'importe quel ecran.
+promethee is an electron app with no cli and no useful url scheme (only
+promethee://auth/callback exists), so we go through macos accessibility: force
+chromium to expose its ax tree, find the "lancer la session" button and press
+it. far more reliable than clicking at coordinates, given the window could be
+on any screen.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ BUNDLE_ID = "app.promethee"
 APP_NAME = "Promethee"
 DB_PATH = Path.home() / "Library/Application Support/Promethee/promethee.db"
 
-# libelles du bouton de demarrage, l'app suit la langue du systeme.
+# labels on the start button — the app follows the system language.
 START_LABELS = {
     "lancer la session", "lancer une session", "lancer une session de focus",
     "start session", "start a session", "start focus session",
@@ -35,14 +35,14 @@ class SessionReply:
 
 
 def _frameworks():
-    # import paresseux : ava doit rester lancable sur une machine sans pyobjc.
+    # lazy import: ava has to stay launchable on a machine without pyobjc.
     import ApplicationServices as ax
     from AppKit import NSWorkspace
     return ax, NSWorkspace
 
 
 def active_session() -> dict | None:
-    """La session en cours d'apres la base locale de promethee, si elle existe."""
+    """The running session according to promethee's local db, if there is one."""
     if not DB_PATH.exists():
         return None
     try:
@@ -80,7 +80,7 @@ def _launch_and_wait(timeout: float = 25.0) -> int | None:
         time.sleep(0.5)
         pid = _pid()
         if pid:
-            # l'interface met encore un instant a se peindre
+            # the interface still takes a moment to paint
             time.sleep(2.0)
             return pid
     return None
@@ -92,7 +92,7 @@ def _attr(ax, element, name):
 
 
 def _find_button(ax, element, labels, budget, depth=0):
-    """Descend l'arbre ax a la recherche d'un bouton portant un de ces libelles."""
+    """Walk the ax tree looking for a button carrying one of these labels."""
     if budget[0] <= 0 or depth > 40:
         return None
     budget[0] -= 1
@@ -110,7 +110,7 @@ def _find_button(ax, element, labels, budget, depth=0):
 
 
 def _show_dashboard() -> None:
-    """Promethee vit dans la barre de menus : sans fenetre, pas d'arbre a fouiller."""
+    """Promethee lives in the menu bar: no window means no tree to search."""
     script = f'''
     tell application "System Events" to tell application process "{APP_NAME}"
       set extras to menu bar 2
@@ -134,7 +134,7 @@ def _show_dashboard() -> None:
 
 
 def start_session(*, wait_confirm: float = 6.0) -> SessionReply:
-    """Demarre une session de focus. Ne fait rien si une session tourne deja."""
+    """Start a focus session. Does nothing if one is already running."""
     running = active_session()
     if running:
         task = running["task"]
@@ -152,7 +152,7 @@ def start_session(*, wait_confirm: float = 6.0) -> SessionReply:
         return SessionReply(False, "Je n'ai pas réussi à ouvrir Prométhée.")
 
     app = ax.AXUIElementCreateApplication(pid)
-    # sans ce drapeau, chromium n'expose qu'une coquille vide a l'accessibilite.
+    # without this flag, chromium exposes nothing but an empty shell to ax.
     ax.AXUIElementSetAttributeValue(app, "AXManualAccessibility", True)
     time.sleep(0.8)
 
@@ -169,8 +169,8 @@ def start_session(*, wait_confirm: float = 6.0) -> SessionReply:
                 break
         if button is not None:
             break
-        # la fenetre existe mais le bouton n'y est pas encore (ou un panneau
-        # le recouvre) : on laisse une chance au rendu.
+        # the window is there but the button isn't yet (or a panel covers it):
+        # give the render a chance.
         time.sleep(1.0 + attempt)
 
     if button is None:
@@ -188,13 +188,13 @@ def start_session(*, wait_confirm: float = 6.0) -> SessionReply:
             detail = f' « {task} »' if task else ""
             return SessionReply(True, f"Session Prométhée{detail} lancée.", task=task)
 
-    # le clic est parti, la base n'a pas encore ete ecrite : on reste positif
-    # sans mentir sur la certitude.
+    # the click went out but the db hasn't been written yet: stay positive
+    # without overstating how sure we are.
     return SessionReply(True, "J'ai lancé ta session Prométhée.")
 
 
 def session_sentence() -> str:
-    """Phrase courte a glisser dans le briefing du matin."""
+    """A short line to slip into the morning briefing."""
     reply = start_session()
     if not reply.ok:
         return ""

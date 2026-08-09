@@ -1,20 +1,20 @@
-"""comprendre une commande quand les mots-cles n'ont pas suffi.
+"""understanding a command when the keywords weren't enough.
 
-le routage d'ava est deterministe : une liste de verbes, de prefixes et de mots
-declencheurs. c'est instantane et ca ne coute rien, donc ca reste le chemin
-principal. mais tout ce qui sort du moule tombait jusqu'ici dans le dernier
-filet — la recherche web — et ava repondait a cote :
+ava's routing is deterministic: a list of verbs, prefixes and trigger words.
+it's instant and costs nothing, so it stays the main path. but anything outside
+the mould used to fall into the last net — the web search — and she answered
+beside the point:
 
-    « baisse un peu le son »          -> recherche web
-    « il me faudrait spotify »        -> recherche web
-    « rappelle-moi dans un quart d'heure » -> recherche web
+    "baisse un peu le son"                 -> web search
+    "il me faudrait spotify"               -> web search
+    "rappelle-moi dans un quart d'heure"   -> web search
 
-ce module ne remplace pas le routage : il s'intercale **juste avant** ce dernier
-filet. on n'appelle donc le reseau que pour les phrases qui allaient de toute
-facon etre mal traitees, et les commandes courantes gardent leur latence nulle.
+this module doesn't replace the routing: it slots in **just before** that last
+net. so the network is only called for sentences that were going to be handled
+badly anyway, and everyday commands keep their zero latency.
 
-modele : `ministral-8b-latest`. mesure du 08/08 : 0,39 s par classification,
-contre 0,54 s pour le 3b qui rendait en plus du json plus brouillon.
+model: `ministral-8b-latest`. measured on 8 august: 0.39 s per classification,
+against 0.54 s for the 3b, which also produced messier json.
 """
 
 from __future__ import annotations
@@ -35,21 +35,21 @@ MODEL = os.getenv("AVA_NLU_MODEL", "ministral-8b-latest").strip()
 BASE_URL = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1").strip()
 TIMEOUT_S = 6.0
 
-# la liste est fermee : chaque entree correspond a une capacite qui existe
-# vraiment dans `_dispatch_command`. un modele qui invente « commander_pizza »
-# nous ferait promettre une action qu'ava ne sait pas faire.
+# the list is closed: every entry maps to a capability that really exists in
+# `_dispatch_command`. a model inventing "commander_pizza" would have us promise
+# an action ava has no idea how to perform.
 INTENTS = {
-    "ouvrir_app",        # cible = nom de l'application
-    "ouvrir_site",       # cible = domaine ou url
+    "ouvrir_app",        # cible = the application name
+    "ouvrir_site",       # cible = a domain or url
     "mail",
     "musique_jouer",
     "musique_pause",
     "musique_suivant",
     "musique_precedent",
-    "volume",            # valeur = 0..100, ou cible = "monter"/"baisser"
+    "volume",            # valeur = 0..100, or cible = "monter"/"baisser"
     "luminosite",
-    "minuteur",          # valeur = duree en secondes
-    "note",              # cible = texte a noter
+    "minuteur",          # valeur = duration in seconds
+    "note",              # cible = the text to jot down
     "heure",
     "date",
     "meteo",
@@ -58,9 +58,9 @@ INTENTS = {
     "agenda_creer",
     "capture_ecran",
     "verrouiller",
-    "recherche_web",     # cible = la requete
-    "discussion",        # question ouverte, pas d'action
-    "competence",        # cible = le nom d'une competence installee
+    "recherche_web",     # cible = the query
+    "discussion",        # an open question, no action
+    "competence",        # cible = the name of an installed skill
     "inconnu",
 }
 
@@ -91,10 +91,10 @@ Exemples :
 "le cours du bitcoin" -> {"intent":"recherche_web","cible":"cours du bitcoin","valeur":null,"confiance":0.9}
 "note qu'il faut rappeler Léa" -> {"intent":"note","cible":"rappeler Léa","valeur":null,"confiance":0.94}"""
 
-# les competences s'ajoutent au vol : on ne donne au modele que leur nom et leur
-# description (etape « decouverte » du standard Agent Skills), jamais leurs
-# instructions completes. c'est ce qui permet d'en avoir trente sans alourdir
-# chaque classification.
+# skills are appended on the fly: the model only ever gets their name and
+# description (the standard's discovery step), never their full instructions.
+# that's what makes thirty of them possible without weighing down every
+# classification.
 SKILLS_PROMPT = """
 
 Compétences installées. Si la demande correspond clairement à l'une d'elles,
@@ -105,7 +105,7 @@ Sinon, ignore cette liste et classe normalement.
 
 
 def build_prompt(catalogue: str = "") -> str:
-    """Le prompt du routeur, augmente des competences disponibles."""
+    """The router prompt, widened with whatever skills are installed."""
     if not catalogue.strip():
         return SYSTEM_PROMPT
     return SYSTEM_PROMPT + SKILLS_PROMPT.format(catalogue=catalogue.strip())
@@ -113,13 +113,11 @@ def build_prompt(catalogue: str = "") -> str:
 
 DEFAULT_THRESHOLD = 0.55
 
-# toutes les erreurs ne coutent pas pareil. se tromper sur « musique_suivant »
-# fait sauter un morceau ; se tromper sur « verrouiller » jette Matheus dehors
-# au milieu de son travail. les actions qu'on ne peut pas defaire d'un mot
-# demandent donc une certitude nettement plus haute.
+# not every mistake costs the same. getting "musique_suivant" wrong skips a
+# track; getting "verrouiller" wrong throws you out of your session mid-work.
+# actions you can't undo with a word therefore demand much more certainty.
 THRESHOLDS = {
-    # une competence execute du code fourni par l'utilisateur : on ne la lance
-    # pas sur une intuition tiede.
+    # a skill runs code the user supplied, so we don't fire one on a hunch.
     "competence": 0.75,
     "verrouiller": 0.9,
     "agenda_creer": 0.85,
@@ -138,8 +136,8 @@ class Understanding:
 
     @property
     def usable(self) -> bool:
-        # en dessous, on prefere le comportement historique : mieux vaut une
-        # recherche web qu'une action inventee sur le mac de quelqu'un.
+        # below that we'd rather have the old behaviour: a web search beats an
+        # invented action on somebody's mac.
         if self.intent not in INTENTS or self.intent == "inconnu":
             return False
         return self.confidence >= THRESHOLDS.get(self.intent, DEFAULT_THRESHOLD)
@@ -154,12 +152,11 @@ CACHE_MAX_ENTRIES = 500
 
 
 class IntentRouter:
-    """Classifie une phrase, avec cache persistant et coupe-circuit.
+    """Classify a sentence, with a persistent cache and a breaker.
 
-    Le cache survit aux redemarrages : une tournure qu'Ava a deja comprise une
-    fois ne repart plus sur le reseau. A l'usage, le vocabulaire de quelqu'un se
-    stabilise vite, donc au bout de quelques jours l'essentiel des commandes
-    « hors moule » repond instantanement et sans jeton.
+    The cache survives restarts: a phrasing Ava has understood once never goes
+    back to the network. In practice someone's vocabulary settles fast, so after
+    a few days most of the off-pattern commands answer instantly and for free.
     """
 
     def __init__(self, model: str = MODEL, timeout_s: float = TIMEOUT_S,
@@ -169,8 +166,8 @@ class IntentRouter:
         self.cache_path = CACHE_PATH if cache_path is None else cache_path
         self._lock = threading.Lock()
         self._cache: dict[str, Understanding] = {}
-        # apres un echec reseau, on arrete d'essayer un moment : sinon chaque
-        # commande paie six secondes de timeout avant de retomber sur le filet.
+        # after a network failure we stop trying for a while, or every command
+        # pays six seconds of timeout before falling back to the net.
         self._blocked_until = 0.0
         self._load_cache()
 
@@ -184,9 +181,9 @@ class IntentRouter:
         for phrase, payload in stored.items():
             if not isinstance(phrase, str) or not isinstance(payload, dict):
                 continue
-            # on repasse par le meme controle que les reponses fraiches : un
-            # fichier de cache modifie a la main ne doit pas pouvoir faire
-            # executer une action qu'ava refuserait normalement.
+            # run it through the same checks as a fresh answer: a cache file
+            # edited by hand must not be able to trigger an action ava would
+            # normally refuse.
             result = parse_understanding(json.dumps(payload))
             if result.usable:
                 self._cache[phrase] = result
@@ -204,14 +201,14 @@ class IntentRouter:
                            encoding="utf-8")
             tmp.replace(self.cache_path)
         except OSError:
-            pass        # un cache qu'on n'arrive pas a ecrire n'empeche rien
+            pass        # a cache we can't write stops nothing
 
     def available(self) -> bool:
         return (bool(api_key()) and time.monotonic() >= self._blocked_until
                 and not net.is_offline())
 
     def knows(self, text: str) -> bool:
-        """Cette tournure est-elle deja apprise ? (donc gratuite et instantanee)"""
+        """Has this phrasing been learned already? (so free and instant)"""
         with self._lock:
             return str(text or "").strip().lower() in self._cache
 
@@ -219,10 +216,10 @@ class IntentRouter:
         phrase = str(text or "").strip()
         if not phrase:
             return Understanding()
-        # le cache passe **avant** la disponibilite : une tournure deja apprise
-        # ne coute rien, elle doit donc marcher meme cle absente, coupe-circuit
-        # ferme ou wifi coupe — c'etait tout l'interet de la garder sur disque,
-        # et l'ordre inverse la rendait justement inutile quand elle servait.
+        # the cache comes **before** the availability check: a learned phrasing
+        # costs nothing, so it has to work with no key, with the breaker open or
+        # with the wifi down — that was the whole point of keeping it on disk,
+        # and the other order made it useless exactly when it mattered.
         key = phrase.lower()
         with self._lock:
             cached = self._cache.get(key)
@@ -269,7 +266,7 @@ class IntentRouter:
 
 
 def parse_understanding(content: str) -> Understanding:
-    """Lit la reponse du modele sans jamais faire confiance a sa forme."""
+    """Read the model's answer without ever trusting its shape."""
     try:
         data = json.loads(content)
     except (TypeError, ValueError):
@@ -282,7 +279,7 @@ def parse_understanding(content: str) -> Understanding:
         intent = "inconnu"
 
     target = data.get("cible", "")
-    # le modele glisse parfois un objet la ou on attend une chaine.
+    # the model sometimes slips an object in where a string is expected.
     target = str(target).strip()[:400] if isinstance(target, (str, int, float)) else ""
 
     value = data.get("valeur")

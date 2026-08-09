@@ -1,8 +1,8 @@
-"""agenda google d'ava : lecture ET ecriture, via l'api rest v3.
+"""ava's google calendar: read AND write, over the rest v3 api.
 
-on parle directement a l'api avec requests plutot que d'embarquer les sdk
-google : trois endpoints suffisent (list, insert, delete) et ca garde le venv
-leger. l'authentification vient de google_auth.
+we talk to the api directly with requests rather than pulling in google's sdks —
+three endpoints are enough (list, insert, delete) and it keeps the venv light.
+authentication comes from google_auth.
 """
 
 from __future__ import annotations
@@ -46,10 +46,10 @@ class NotConnected(GoogleCalendarError):
 
 
 def _parse(value: dict) -> tuple[dt.datetime, bool]:
-    """Un « start »/« end » google : soit dateTime, soit date (journee entiere)."""
+    """A google "start"/"end": either dateTime, or date for an all-day event."""
     if value.get("dateTime"):
         moment = dt.datetime.fromisoformat(value["dateTime"])
-        # on ramene tout en heure locale naive, comme le reste d'ava.
+        # everything comes back as naive local time, like the rest of ava.
         if moment.tzinfo is not None:
             moment = moment.astimezone().replace(tzinfo=None)
         return moment, False
@@ -95,7 +95,7 @@ class GoogleCalendar:
             return {}
         return response.json()
 
-    # --- lecture ------------------------------------------------------------
+    # --- reading ------------------------------------------------------------
 
     def events_for_day(self, day_offset: int = 0, *, calendar_id: str = "primary") -> tuple[GoogleEvent, ...]:
         start_day = dt.date.today() + dt.timedelta(days=int(day_offset))
@@ -127,7 +127,7 @@ class GoogleCalendar:
             ))
         return tuple(events)
 
-    # --- ecriture -----------------------------------------------------------
+    # --- writing ------------------------------------------------------------
 
     def create_event(self, title: str, start: dt.datetime, *, minutes: int = 60,
                      location: str = "", description: str = "",
@@ -156,15 +156,14 @@ class GoogleCalendar:
         self._call("DELETE", f"/calendars/{calendar_id}/events/{event_id}")
 
 
-# --- comprendre « demain a 14h30 » ------------------------------------------
+# --- making sense of "demain a 14h30" ---------------------------------------
 
 def parse_french_datetime(text: str, *, now: dt.datetime | None = None) -> dt.datetime | None:
-    """Extrait une date/heure d'une phrase dite a voix haute.
+    """Pull a date and time out of a spoken sentence.
 
-    Volontairement simple : les formes que Matheus utilise vraiment
-    (« demain à 14h », « lundi à 9h30 », « le 12 septembre à 15h »). Sans heure
-    trouvee, on ne rend rien : mieux vaut redemander que poser un rendez-vous
-    a minuit.
+    Deliberately simple: the shapes people actually say ("demain à 14h", "lundi
+    à 9h30", "le 12 septembre à 15h"). With no time found we return nothing —
+    better to ask again than to book something at midnight.
     """
     value = " " + str(text or "").lower().strip() + " "
     now = now or dt.datetime.now()
@@ -181,7 +180,7 @@ def parse_french_datetime(text: str, *, now: dt.datetime | None = None) -> dt.da
     if hour is None or not (0 <= hour <= 23) or not (0 <= minute <= 59):
         return None
     if hour < 8 and re.search(r"\b(?:apres[- ]midi|après[- ]midi|soir)\b", value):
-        hour += 12          # « 5h de l'après-midi »
+        hour += 12          # "5h de l'après-midi"
 
     day = now.date()
     weekdays = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
@@ -204,13 +203,13 @@ def parse_french_datetime(text: str, *, now: dt.datetime | None = None) -> dt.da
         for index, name in enumerate(weekdays):
             if re.search(rf"\b{name}\b", value):
                 ahead = (index - now.weekday()) % 7
-                # « lundi » un lundi veut dire le lundi suivant.
+                # "lundi" said on a monday means next monday.
                 day = now.date() + dt.timedelta(days=ahead or 7)
                 break
 
     moment = dt.datetime.combine(day, dt.time(hour, minute))
     if moment < now - dt.timedelta(minutes=1) and not match:
-        # une heure deja passee sans date explicite : c'est pour demain.
+        # a time already gone by with no explicit date means tomorrow.
         moment += dt.timedelta(days=1)
     return moment
 

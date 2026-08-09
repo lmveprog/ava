@@ -1,4 +1,4 @@
-"""conversation privee via un serveur openai-compatible local."""
+"""private conversation, through a local openai-compatible server."""
 
 from __future__ import annotations
 
@@ -46,8 +46,8 @@ class LocalConversationEngine:
     @staticmethod
     def _clean_answer(value: object) -> str:
         text = str(value or "").strip()
-        # Certains modèles de raisonnement anciens exposent encore leur bloc
-        # interne. Ava ne doit jamais le lire à voix haute.
+        # some older reasoning models still leak their internal block. ava must
+        # never read that out loud.
         if "</think>" in text:
             text = text.split("</think>", 1)[1].strip()
         return text
@@ -69,7 +69,7 @@ class LocalConversationEngine:
         response.raise_for_status()
         items = response.json().get("data", [])
         if not items:
-            raise RuntimeError("aucun modele local charge")
+            raise RuntimeError("no local model loaded")
         self.model = str(items[0]["id"])
         return self.model
 
@@ -96,7 +96,7 @@ class LocalConversationEngine:
         response.raise_for_status()
         answer = self._clean_answer(response.json()["choices"][0]["message"]["content"])
         if not answer:
-            raise RuntimeError("reponse vide")
+            raise RuntimeError("empty answer")
         return ConversationReply(True, answer, f"local:{model}")
 
     @staticmethod
@@ -116,7 +116,7 @@ class LocalConversationEngine:
         models = [str(item.get("name", "")) for item in tags.json().get("models", [])]
         model = self._ollama_model(models)
         if not model:
-            raise RuntimeError("aucun modele Ollama conversationnel")
+            raise RuntimeError("no conversational ollama model")
         response = requests.post(
             "http://127.0.0.1:11434/api/chat",
             json={
@@ -132,24 +132,24 @@ class LocalConversationEngine:
         response.raise_for_status()
         answer = self._clean_answer(response.json().get("message", {}).get("content"))
         if not answer:
-            raise RuntimeError("reponse Ollama vide")
+            raise RuntimeError("empty ollama answer")
         return ConversationReply(True, answer, f"ollama:{model}")
 
     def _ask_mistral(self, messages: list[dict], max_tokens: int) -> ConversationReply:
-        """Repli distant quand aucun moteur local ne tourne.
+        """The remote fallback, for when no local engine is running.
 
-        LM Studio et Ollama ne sont pas toujours lances, et jusqu'ici Ava
-        repondait « le moteur de discussion local n'est pas lance » — ce qui, du
-        point de vue de quelqu'un qui lui parle, ressemble a une panne.
-        `mistral-small` repond en moins d'une seconde et coute trois fois rien.
+        LM Studio and Ollama aren't always up, and until now Ava answered "the
+        local conversation engine isn't running" — which, to someone talking to
+        her, sounds like she's broken. `mistral-small` answers in under a second
+        and costs next to nothing.
         """
         key = os.getenv("MISTRAL_API_KEY", "").strip()
         if not key:
-            raise RuntimeError("pas de cle mistral")
-        # seul ce moteur-ci sort du mac : lm studio et ollama repondent sur la
-        # boucle locale, ils n'ont rien a faire derriere le coupe-circuit.
+            raise RuntimeError("no mistral key")
+        # this is the only engine that leaves the mac: lm studio and ollama
+        # answer on the loopback, so they have no business behind the breaker.
         if not net.reachable("discussion"):
-            raise RuntimeError("reseau injoignable")
+            raise RuntimeError("network unreachable")
         model = os.getenv("AVA_CHAT_MODEL", "mistral-small-latest").strip()
         base = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1").strip()
         try:
@@ -168,11 +168,11 @@ class LocalConversationEngine:
         response.raise_for_status()
         answer = self._clean_answer(response.json()["choices"][0]["message"]["content"])
         if not answer:
-            raise RuntimeError("reponse mistral vide")
+            raise RuntimeError("empty mistral answer")
         return ConversationReply(True, answer, f"mistral:{model}")
 
     def _ask_anywhere(self, messages: list[dict], max_tokens: int) -> ConversationReply:
-        """Le local d'abord (rien ne sort du mac), le distant en secours."""
+        """Local first (nothing leaves the mac), remote only as a backstop."""
         for attempt in (self._ask_openai_compatible, self._ask_ollama, self._ask_mistral):
             try:
                 return attempt(messages, max_tokens)
@@ -181,7 +181,7 @@ class LocalConversationEngine:
         return ConversationReply(False)
 
     def ask_once(self, text: str, max_tokens: int = 260) -> ConversationReply:
-        """Synthese locale sans polluer la memoire de conversation."""
+        """A one-off, without polluting the conversation memory."""
         question = text.strip()[:12000]
         if not question:
             return ConversationReply(False)
@@ -207,7 +207,7 @@ class LocalConversationEngine:
                 ]
                 reply = self._ask_anywhere(messages, 220)
                 if not reply.available:
-                    raise RuntimeError("aucun moteur de discussion disponible")
+                    raise RuntimeError("no conversation engine available")
                 answer = reply.text
                 self._history.extend((
                     {"role": "user", "content": question},
