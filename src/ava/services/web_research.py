@@ -1,4 +1,4 @@
-"""Recherche web lisible par Ava, avec sources explicites et cas OM officiel."""
+"""web search ava can read out, with visible sources and an official OM case."""
 
 from __future__ import annotations
 

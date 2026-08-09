@@ -1,31 +1,30 @@
-"""la voix d'ava : **un moteur, et un filet**.
+"""ava's voice: **one engine, and a safety net**.
 
-`chatterbox` (defaut) tourne sur le gpu du mac. il ne sort jamais de la machine,
-ne coute rien et ne s'epuise pas. `say` reste derriere, uniquement si le modele
-ne se charge pas du tout.
+`chatterbox` (the default) runs on the mac's gpu. it never leaves the machine,
+costs nothing and doesn't run out. `say` sits behind it, and only if the model
+won't load at all.
 
-⚠️ **le choix ici est un choix de timbre, pas de vitesse.** mesures sur ce mac
-(m5 pro), meme texte, pour que le prix soit connu :
+⚠️ **the choice here is about timbre, not speed.** measured on this mac (m5 pro),
+same text, so the price is on the table:
 
-    moteur                 « Oui ? »   briefing de 31 s   sort du mac
-    chatterbox (local)     3-4 s       ~45 s              non
-    mistral (reseau)       0,51 s      2,86 s             **oui**
-    kokoro (local, mlx)    0,065 s     1,70 s             non
+    engine                 "Oui ?"    31 s briefing    leaves the mac
+    chatterbox (local)     3-4 s      ~45 s            no
+    mistral (network)      0.51 s     2.86 s           **yes**
+    kokoro (local, mlx)    0.065 s    1.70 s           no
 
-kokoro est vingt fois plus rapide et Matheus a tranche pour chatterbox apres
-avoir compare a l'oreille : une assistante qu'on entend toute la journee se juge
-au timbre avant la milliseconde. **la lenteur ne se voit presque pas** parce que
-les deux seuls moments qui comptent sont pre-fabriques : `prewarm()` met les
-accuses de reception en cache au demarrage, et le briefing est prepare avant
-d'etre demande. seule une phrase inedite paie le rtf.
+kokoro is twenty times faster and chatterbox still won, decided by ear: an
+assistant you hear all day is judged on timbre before milliseconds. **the
+slowness barely shows** because the only two moments that matter are made in
+advance — `prewarm()` caches the acknowledgements at startup, and the briefing
+is built before anyone asks for it. only a brand-new sentence pays the rtf.
 
-ce qui a change en revanche, c'est qu'**un moteur ne retombe plus sur un autre**.
-la cascade `mistral -> chatterbox -> elevenlabs -> say` faisait sortir une phrase
-ratee avec une *autre voix* : on croyait a un bug du timbre, c'etait un repli.
-le timbre choisi est le timbre entendu.
+what did change is that **one engine no longer falls back to another**. the
+`mistral -> chatterbox -> elevenlabs -> say` cascade meant a failed sentence came
+out in a *different voice*: it looked like a bug in the timbre, it was a
+fallback. the timbre you choose is the timbre you hear.
 
-tout passe par un cache disque indexe sur (texte + moteur + reglages) : une
-phrase deja dite ne se resynthetise jamais.
+everything goes through a disk cache keyed on (text + engine + settings): a
+sentence already said is never synthesised twice.
 """
 
 from __future__ import annotations
@@ -48,8 +47,8 @@ DEFAULT_REFERENCE = paths.VOICES_DIR / "reference.wav"
 ENGINES = ("kokoro", "mistral", "chatterbox", "elevenlabs", "system")
 DEFAULT_ENGINE = "chatterbox"
 
-# 82 M de parametres en 4 bits (~80 Mo) : il tient en memoire sans se faire
-# sentir, la ou chatterbox mobilisait plusieurs Go et 9 s de chargement.
+# 82M parameters in 4 bits (~80 MB): it sits in memory without being felt,
+# where chatterbox took several GB and 9 s to load.
 KOKORO_MODEL = os.getenv("AVA_KOKORO_MODEL", "mlx-community/Kokoro-82M-4bit").strip()
 KOKORO_DEFAULT_VOICE = "ff_siwis"
 KOKORO_RATE = 24000
@@ -58,7 +57,7 @@ MISTRAL_TTS_MODEL = os.getenv("AVA_TTS_MODEL", "voxtral-mini-tts-latest").strip(
 MISTRAL_BASE = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1").strip()
 DEFAULT_MISTRAL_VOICE = "fr_marie_neutral"
 
-# chatterbox part en vrille sur les tres longs blocs : on decoupe par phrases.
+# chatterbox goes off the rails on very long blocks, so we split by sentence.
 MAX_CHUNK_CHARS = 280
 
 _model = None
@@ -97,8 +96,8 @@ def reference_path() -> Path | None:
 
 
 def _params() -> tuple[float, float, float]:
-    # valeurs retenues apres comparaison a l'oreille et sur les durees :
-    # cfg 0.35 tient mieux le debit, temperature 0.65 limite les derives.
+    # settled on by ear and by comparing durations: cfg 0.35 holds the pace
+    # better, temperature 0.65 keeps it from drifting.
     voice = _settings()
 
     def number(key, fallback, low, high):
@@ -119,12 +118,12 @@ def _cache_path(text: str, suffix: str, *parts: str) -> Path:
 
 
 def split_sentences(text: str, limit: int = MAX_CHUNK_CHARS) -> list[str]:
-    """Coupe aux frontieres de phrases, en regroupant tant que ca tient."""
+    """Cut on sentence boundaries, regrouping while it still fits."""
     pieces = [p.strip() for p in re.split(r"(?<=[.!?…])\s+", str(text or "").strip()) if p.strip()]
     chunks: list[str] = []
     for piece in pieces:
         while len(piece) > limit:
-            # phrase interminable : on coupe a la derniere virgule utile.
+            # an endless sentence: cut at the last comma that helps.
             cut = piece.rfind(",", 0, limit)
             cut = cut + 1 if cut > limit // 2 else limit
             chunks.append(piece[:cut].strip())
@@ -136,19 +135,18 @@ def split_sentences(text: str, limit: int = MAX_CHUNK_CHARS) -> list[str]:
     return chunks or ([str(text).strip()] if str(text).strip() else [])
 
 
-# en dessous de ce seuil, une phrase ne merite pas son propre aller-retour
-# reseau : on la recolle a la suivante.
+# below this, a sentence doesn't deserve its own network round trip — glue it
+# onto the next one.
 MIN_UNIT_CHARS = 30
 
 
 def split_speech_units(text: str, limit: int = MAX_CHUNK_CHARS) -> list[str]:
-    """Decoupe phrase par phrase, sans regrouper comme `split_sentences`.
+    """Split sentence by sentence, without regrouping like `split_sentences`.
 
-    Pour un moteur distant c'est tout benefice : les morceaux partent en
-    parallele (le briefing coute le temps de sa plus longue phrase, pas la
-    somme), les coupures tombent sur de vraies frontieres de phrase donc la
-    prosodie ne souffre pas, et le transcript se cale au mot pres puisqu'on
-    mesure la duree reelle de chaque phrase au lieu de l'estimer.
+    For a remote engine it's all upside: the pieces go out in parallel (the
+    briefing costs its longest sentence, not the sum), the cuts land on real
+    sentence boundaries so the prosody doesn't suffer, and the transcript lines
+    up to the word since we measure each sentence instead of estimating it.
     """
     units: list[str] = []
     for piece in split_sentences(text, limit):
@@ -156,8 +154,8 @@ def split_speech_units(text: str, limit: int = MAX_CHUNK_CHARS) -> list[str]:
             sentence = sentence.strip()
             if not sentence:
                 continue
-            # une bribe toute seule ("Voilà.") ne vaut pas un appel : on la colle
-            # a la precedente tant que ca tient dans la limite.
+            # a fragment on its own ("Voilà.") isn't worth a call: stick it to
+            # the previous one while it still fits under the limit.
             if (units and len(sentence) < MIN_UNIT_CHARS
                     and len(units[-1]) + len(sentence) + 1 <= limit):
                 units[-1] = f"{units[-1]} {sentence}"
@@ -186,12 +184,12 @@ def _real_import():
 
 
 def _import_chatterbox(loader=_real_import, attempts: int = 4, pause: float = 1.5):
-    """Importe chatterbox, en encaissant la course a l'import de transformers.
+    """Import chatterbox, absorbing the race in transformers' own imports.
 
-    transformers expose ses classes par un module paresseux qui n'est pas
-    thread-safe : si ava importe encore ses propres modules pendant qu'on
-    charge la voix en fond, on se prend un « cannot import name LlamaModel ».
-    Ce n'est jamais definitif — une seconde plus tard, ca passe.
+    transformers exposes its classes through a lazy module that isn't
+    thread-safe: if ava is still importing her own modules while the voice loads
+    in the background, you get "cannot import name LlamaModel". It's never
+    permanent — a second later it works.
     """
     last = None
     for _attempt in range(attempts):
@@ -200,11 +198,11 @@ def _import_chatterbox(loader=_real_import, attempts: int = 4, pause: float = 1.
         except ImportError as exc:
             last = exc
             time.sleep(pause)
-    raise last if last else ImportError("chatterbox introuvable")
+    raise last if last else ImportError("chatterbox not found")
 
 
 def _load_model():
-    """Charge le modele une seule fois (~8 s au demarrage, puis il reste chaud)."""
+    """Load the model once (~8 s at startup, then it stays warm)."""
     global _model, _model_error
     with _model_lock:
         if _model is not None or _model_error:
@@ -213,15 +211,15 @@ def _load_model():
             import torch
             ChatterboxMultilingualTTS = _import_chatterbox()
             device = _device()
-            # sur mps, certains noyaux manquent encore : on retombe sur le cpu
-            # au lieu de planter en pleine phrase.
+            # some kernels are still missing on mps: fall back to the cpu
+            # rather than crashing mid-sentence.
             if device == "mps":
                 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
             started = time.time()
             try:
                 _model = ChatterboxMultilingualTTS.from_pretrained(device=device, t3_model="v3")
             except TypeError:
-                # version pypi (v2) : pas de selecteur de modele.
+                # the pypi build (v2) has no model selector.
                 _model = ChatterboxMultilingualTTS.from_pretrained(device=device)
             print(f"[voix] chatterbox chargé sur {device} en {time.time() - started:.1f}s")
         except Exception as exc:  # noqa: BLE001
@@ -231,9 +229,9 @@ def _load_model():
     return _model
 
 
-# le modele tourne a peu pres au rythme de la parole (rtf ~1,5 sur mps) : une
-# reponse courte coute donc quelques secondes. ces phrases-la reviennent tout le
-# temps, on les fabrique une fois au demarrage et elles sortent ensuite du cache.
+# the model runs at roughly the pace of speech (rtf ~1.5 on mps), so a short
+# answer costs a few seconds. these lines come up constantly — make them once at
+# startup and they come out of the cache from then on.
 WARM_PHRASES = (
     "Oui ?",
     "C'est fait.",
@@ -245,15 +243,15 @@ WARM_PHRASES = (
 )
 
 
-# le cache grossit d'un fichier par phrase jamais dite deux fois : 12 Mo apres
-# une matinee, donc plusieurs Go a l'annee si personne ne balaie.
+# the cache grows by one file per sentence never said twice: 12 MB after a
+# morning, so several GB a year if nobody sweeps up.
 CACHE_MAX_BYTES = 400 * 1024 * 1024
 CACHE_MAX_AGE_DAYS = 30
 
 
 def prune_cache(max_bytes: int = CACHE_MAX_BYTES, max_age_days: int = CACHE_MAX_AGE_DAYS) -> int:
-    """Fait le menage : d'abord les vieux fichiers, puis les plus anciens tant
-    que le dossier depasse la taille voulue. Renvoie le nombre d'octets liberes."""
+    """Sweep up: old files first, then the oldest remaining while the folder is
+    over the size we want. Returns the number of bytes freed."""
     if not CACHE_DIR.is_dir():
         return 0
     entries = []
@@ -265,13 +263,13 @@ def prune_cache(max_bytes: int = CACHE_MAX_BYTES, max_age_days: int = CACHE_MAX_
         except OSError:
             continue
         entries.append((stat.st_mtime, stat.st_size, path))
-    entries.sort()                      # les plus vieux d'abord
+    entries.sort()                      # oldest first
     cutoff = time.time() - max_age_days * 86400
     total = sum(size for _mtime, size, _path in entries)
     freed = 0
 
     def drop(path: Path, size: int) -> int:
-        # le sidecar de timings suit toujours son audio.
+        # the timing sidecar always follows its audio.
         gone = 0
         for victim in (path, path.with_suffix(".timing.json")):
             try:
@@ -283,18 +281,18 @@ def prune_cache(max_bytes: int = CACHE_MAX_BYTES, max_age_days: int = CACHE_MAX_
 
     for mtime, size, path in entries:
         if path.suffix == ".json":
-            continue                    # emporte avec son audio
+            continue                    # goes with its audio
         if mtime < cutoff or total - freed > max_bytes:
             freed += drop(path, size)
     return freed
 
 
 def prewarm(phrases=WARM_PHRASES) -> None:
-    """Remplit le cache des phrases courantes, en fond.
+    """Fill the cache with the everyday lines, in the background.
 
-    Sur kokoro le modele monte en 0,2 s, mais la **premiere** phrase paie encore
-    la construction du pipeline francais (~1 s, contre 0,065 s ensuite) : c'est
-    exactement ce qu'on retire du chemin en le faisant ici, au demarrage.
+    On kokoro the model comes up in 0.2 s, but the **first** sentence still pays
+    for building the french pipeline (~1 s, against 0.065 s after): that's
+    exactly what doing it here, at startup, takes off the path.
     """
     engine = engine_name()
 
@@ -323,16 +321,16 @@ MAX_TRIES = 3
 
 
 def expected_seconds(text: str) -> float:
-    """Duree plausible d'une phrase, pour reperer une generation qui derape."""
+    """A plausible duration for a sentence, to catch a generation going wrong."""
     words = len(str(text or "").split())
     return max(0.55, words / WORDS_PER_MINUTE * 60)
 
 
 def _trim_and_level(wav, sr: int):
-    """Coupe les silences de bord et egalise le niveau.
+    """Trim the silence at the edges and even out the level.
 
-    Sans ca, les morceaux d'une meme phrase n'ont pas le meme volume et les
-    blancs s'accumulent : a l'oreille, ca fait « la voix bugue ».
+    Without it, pieces of the same sentence come out at different volumes and
+    the gaps pile up: to the ear, "the voice is glitching".
     """
     import torch
 
@@ -352,12 +350,11 @@ def _trim_and_level(wav, sr: int):
 
 
 def acceptable_ratio(chunk: str) -> tuple[float, float]:
-    """Fenetre de duree toleree, plus large sur les phrases courtes.
+    """The duration window we accept, wider on short sentences.
 
-    Une phrase de trois mots peut legitimement etre expediee en deux fois moins
-    de temps que la moyenne ; la refuser ferait payer trois generations pour
-    rien. Sur les phrases longues au contraire, la moyenne est fiable et un
-    ecart signale une vraie derive.
+    A three-word line can legitimately be delivered in half the average time;
+    refusing it would cost three generations for nothing. On long sentences the
+    average is reliable, and a gap does signal something going wrong.
     """
     words = len(str(chunk or "").split())
     if words <= 4:
@@ -368,16 +365,16 @@ def acceptable_ratio(chunk: str) -> tuple[float, float]:
 
 
 def _tries_for(chunk: str) -> int:
-    # rejouer une longue phrase coute cher : on se contente de deux prises.
+    # regenerating a long sentence is expensive, so two takes will do.
     return 2 if len(str(chunk or "").split()) > 15 else MAX_TRIES
 
 
 def _generate_chunk(model, chunk: str, reference, exaggeration, cfg_weight, temperature):
-    """Genere un morceau, et recommence si la duree n'a aucun sens.
+    """Generate a piece, and try again if the duration makes no sense.
 
-    Chatterbox part parfois en roue libre sur les textes tres courts : « Oui ? »
-    a donne 3,3 s de babillage puis 0,76 s au coup suivant. On garde la prise
-    dont la duree colle le mieux a ce qu'on attend.
+    Chatterbox sometimes free-wheels on very short text: "Oui ?" produced 3.3 s
+    of babbling, then 0.76 s on the next take. We keep whichever take lands
+    closest to the expected duration.
     """
     target = expected_seconds(chunk)
     low, high = acceptable_ratio(chunk)
@@ -403,11 +400,11 @@ def _generate_chunk(model, chunk: str, reference, exaggeration, cfg_weight, temp
 
 def _write_timings(audio_path: Path, chunks: list[str], seconds: list[float],
                    *, gap_s: float = 0.0) -> None:
-    """Note la duree reelle de chaque phrase a cote de l'audio.
+    """Write each sentence's real duration next to the audio.
 
-    C'est ce qui permet au transcript de suivre la voix : sans ca, l'overlay
-    etale les mots lineairement sur la duree totale et le texte derive dans les
-    phrases longues.
+    This is what lets the transcript follow the voice: without it, the overlay
+    spreads the words linearly over the total duration and the text drifts on
+    long sentences.
     """
     marks = []
     offset = 0.0
@@ -423,10 +420,10 @@ def _write_timings(audio_path: Path, chunks: list[str], seconds: list[float],
 
 
 def word_delays(audio_path: Path | None, text: str, total_ms: int) -> list[int]:
-    """Instant d'apparition de chaque mot, en millisecondes.
+    """When each word appears, in milliseconds.
 
-    On repartit les mots a l'interieur de LEUR phrase, pas sur tout le
-    briefing : une phrase courte suivie d'une longue ne decale plus tout.
+    Words are spread inside THEIR own sentence, not across the whole briefing: a
+    short sentence followed by a long one no longer shifts everything.
     """
     words = str(text or "").split()
     if not words:
@@ -451,8 +448,8 @@ def word_delays(audio_path: Path | None, text: str, total_ms: int) -> list[int]:
         span = max(1.0, float(mark.get("ms", 0)))
         step = span / len(chunk_words)
         delays.extend(round(start + index * step) for index in range(len(chunk_words)))
-    # le decoupage en phrases peut avoir avale un espace : on recale sur le
-    # nombre de mots reellement affiches.
+    # splitting into sentences may have eaten a space: realign on the number of
+    # words actually shown.
     if len(delays) < len(words):
         last = delays[-1] if delays else 0
         delays.extend([last] * (len(words) - len(delays)))
@@ -501,9 +498,9 @@ def _chatterbox_audio(text: str) -> Path | None:
 
 # --- mistral (voxtral tts) ----------------------------------------------------
 
-# la voix prend la couleur de ce qu'elle dit. c'est trois lignes de code parce
-# que le catalogue expose deja marie en six humeurs — inutile de bricoler du
-# pitch shifting derriere.
+# the voice takes on the colour of what it says. three lines of code, because
+# the catalogue already ships marie in six moods — no need to hand-roll pitch
+# shifting behind it.
 MOOD_VOICES = {
     "neutral": "fr_marie_neutral",
     "happy": "fr_marie_happy",
@@ -519,10 +516,10 @@ _APOLOGIES = ("désolée", "désolé", "je n'ai pas réussi", "en échec",
 
 
 def mood_for(text: str) -> str:
-    """Devine l'humeur qui va avec la phrase.
+    """Guess the mood that goes with the sentence.
 
-    Volontairement conservateur : dans le doute on reste neutre. Une assistante
-    qui s'enthousiasme a contretemps sonne plus faux qu'une assistante plate.
+    Deliberately conservative: when in doubt, stay neutral. An assistant who
+    gets excited at the wrong moment rings falser than a flat one.
     """
     value = str(text or "").strip()
     if not value:
@@ -538,7 +535,7 @@ def mood_for(text: str) -> str:
 
 
 def mistral_voice(mood: str = "") -> str:
-    """Le timbre a utiliser : celui des reglages, module par l'humeur."""
+    """Which timbre to use: the one from the settings, coloured by the mood."""
     configured = str(_settings().get("mistral_voice", "")).strip() or DEFAULT_MISTRAL_VOICE
     if not _settings().get("expressive", True) or not mood:
         return configured
@@ -550,7 +547,7 @@ def _mistral_key() -> str:
 
 
 def _mistral_chunk(text: str, voice: str, timeout: float = 20.0) -> bytes:
-    """Un aller-retour http, un morceau de mp3. Leve en cas d'echec."""
+    """One http round trip, one piece of mp3. Raises on failure."""
     import requests
 
     response = requests.post(
@@ -569,17 +566,17 @@ def _mistral_chunk(text: str, voice: str, timeout: float = 20.0) -> bytes:
     return base64.b64decode(data)
 
 
-# lance par le launchagent, ava herite d'un PATH minimal
-# (`/usr/bin:/bin:/usr/sbin:/sbin`) : homebrew n'y est pas. `ffmpeg` etait donc
-# introuvable une fois ava demarree automatiquement — et comme le recollage rate
-# en silence, **tout briefing de plus d'une phrase devenait muet**, alors que
-# tout marchait quand on la lancait a la main depuis un terminal.
+# started by the launch agent, ava inherits a minimal PATH
+# (`/usr/bin:/bin:/usr/sbin:/sbin`) with no homebrew in it. so `ffmpeg` was
+# nowhere to be found once ava started automatically — and since the concat
+# fails silently, **every briefing longer than one sentence went mute**, while
+# everything worked when she was started by hand from a terminal.
 _TOOL_DIRS = ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
 _tools: dict[str, str] = {}
 
 
 def tool_path(name: str) -> str:
-    """Le chemin absolu d'un binaire, quel que soit le PATH herite."""
+    """The absolute path of a binary, whatever PATH we inherited."""
     if name in _tools:
         return _tools[name]
     import shutil
@@ -590,12 +587,12 @@ def tool_path(name: str) -> str:
             if candidate.is_file() and os.access(candidate, os.X_OK):
                 found = str(candidate)
                 break
-    _tools[name] = found or name        # a defaut, on laisse le systeme essayer
+    _tools[name] = found or name        # failing that, let the system try
     return _tools[name]
 
 
 def _mp3_duration(path: Path) -> float:
-    """Duree annoncee par l'en-tete. Rapide, mais approximative."""
+    """The duration the header claims. Fast, but approximate."""
     try:
         out = subprocess.run(
             [tool_path("ffprobe"), "-v", "error", "-show_entries", "format=duration",
@@ -610,12 +607,12 @@ DECODE_RATE = 24000
 
 
 def _decoded_duration(path: Path) -> float:
-    """Duree exacte, en decodant vraiment.
+    """The exact duration, by actually decoding.
 
-    L'en-tete mp3 sous-estime : sur un briefing de cinq phrases elle donnait
-    26,61 s la ou le decodage donne 28,42 s — et c'est bien 28,42 s qu'on
-    obtient apres recollage. Utiliser l'en-tete decalait donc le transcript de
-    presque deux secondes sur la fin.
+    The mp3 header undercounts: on a five-sentence briefing it said 26.61 s
+    where decoding gives 28.42 s — and 28.42 s is what you really get after
+    concatenation. Trusting the header therefore pushed the transcript almost
+    two seconds off by the end.
     """
     try:
         out = subprocess.run(
@@ -629,14 +626,14 @@ def _decoded_duration(path: Path) -> float:
 
 
 def _concat_mp3(parts: list[Path], target: Path) -> bool:
-    """Recolle les morceaux en un seul flux, sans blanc aux jointures.
+    """Join the pieces into one stream, with no gap at the seams.
 
-    La copie directe (`-f concat -c copy`) serait gratuite mais chaque mp3 traine
-    son silence d'amorce et de fin : mesure sur un briefing de 5 phrases, ca
-    ajoutait **1,6 s** au total, soit ~320 ms de blanc par jointure. A l'oreille
-    ca hache le debit, et le transcript — cale sur la duree des morceaux —
-    derivait d'autant. Le filtre `concat` decode puis reencode une seule fois :
-    la soudure est franche et les durees redeviennent additives.
+    A straight copy (`-f concat -c copy`) would be free, but every mp3 drags its
+    lead-in and lead-out silence along: measured on a 5-sentence briefing, that
+    added **1.6 s** overall, about 320 ms of dead air per seam. It chops up the
+    pace, and the transcript — pinned to the pieces' durations — drifted by the
+    same amount. The `concat` filter decodes and re-encodes once: the joins are
+    clean and the durations add up again.
     """
     try:
         command = [tool_path("ffmpeg"), "-y", "-loglevel", "error"]
@@ -659,12 +656,12 @@ def _mistral_audio(text: str, mood: str = "") -> Path | None:
     voice = mistral_voice(mood)
     path = _cache_path(text, ".mp3", "mistral", MISTRAL_TTS_MODEL, voice)
     if path.exists() and path.stat().st_size > 0:
-        # le cache reste lisible hors ligne : c'est la seule voix qui ne coute
-        # rien du tout, il ne faut surtout pas la faire dependre du reseau.
+        # the cache stays readable offline: it's the one voice that costs
+        # nothing at all, so it must never be made to depend on the network.
         return path
 
-    # sans cette garde, un briefing de six phrases hors ligne payait six fois le
-    # timeout avant de tomber sur le repli local.
+    # without this guard, an offline six-sentence briefing paid the timeout six
+    # times before dropping to the local fallback.
     if not net.reachable("voix"):
         return None
 
@@ -673,8 +670,8 @@ def _mistral_audio(text: str, mood: str = "") -> Path | None:
         return None
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        # les morceaux partent ensemble : un briefing de six phrases se fabrique
-        # dans le temps de la plus lente, pas dans la somme des six.
+        # the pieces go out together: a six-sentence briefing takes as long as
+        # its slowest sentence, not the sum of all six.
         if len(chunks) == 1:
             audio = [_mistral_chunk(chunks[0], voice)]
         else:
@@ -703,9 +700,9 @@ def _mistral_audio(text: str, mood: str = "") -> Path | None:
                      else [_decoded_duration(tmp)])
         total = _decoded_duration(tmp)
         tmp.replace(path)
-        # filet : s'il reste un ecart entre la somme des morceaux et le fichier
-        # final, on l'etale sur les jointures plutot que de laisser le
-        # transcript deriver jusqu'a la derniere phrase.
+        # safety net: if a gap remains between the sum of the pieces and the
+        # final file, spread it over the seams rather than letting the transcript
+        # drift all the way to the last sentence.
         residual = total - sum(durations)
         gap = residual / (len(durations) - 1) if len(durations) > 1 and residual > 0 else 0.0
         _write_timings(path, chunks, durations, gap_s=gap)
@@ -730,7 +727,7 @@ def kokoro_voice() -> str:
 
 
 def _load_kokoro():
-    """Charge le modele local une fois. ~0,2 s, contre 8,9 s pour chatterbox."""
+    """Load the local model once. ~0.2 s, against 8.9 s for chatterbox."""
     global _kokoro, _kokoro_error
     with _kokoro_lock:
         if _kokoro is not None or _kokoro_error:
@@ -766,10 +763,10 @@ def _kokoro_audio(text: str) -> Path | None:
         print(f"[voix] kokoro : dépendance manquante ({exc})")
         return None
 
-    # ⚠️ le g2p francais de kokoro passe par espeak, qui **tronque les longs
-    # textes** faute de decoupage interne (il le dit lui-meme dans un warning).
-    # on decoupe donc phrase par phrase — ce qui donne au passage la duree
-    # reelle de chaque phrase pour caler le transcript.
+    # ⚠️ kokoro's french g2p goes through espeak, which **truncates long text**
+    # for lack of internal splitting (it says so itself in a warning). so we cut
+    # sentence by sentence — which also hands us each sentence's real duration
+    # for lining the transcript up.
     chunks = split_speech_units(text)
     if not chunks:
         return None
@@ -850,10 +847,10 @@ def _eleven_audio(text: str) -> Path | None:
 # --- api publique -------------------------------------------------------------
 
 def is_cached(text: str, mood: str = "") -> bool:
-    """Cette phrase a-t-elle deja ete fabriquee ?
+    """Has this sentence already been made?
 
-    Sert aux mesures : distinguer une reponse qui sort du disque (instantanee)
-    d'une qui demande une synthese, sinon la latence moyenne ne veut rien dire.
+    Used for measurements: telling an answer that comes off disk (instant) from
+    one that needs synthesising, or the average latency means nothing.
     """
     value = str(text or "").strip()
     if not value:
@@ -870,12 +867,12 @@ def is_cached(text: str, mood: str = "") -> bool:
 
 
 def local_voice_ready() -> bool:
-    """Le modele local est-il deja en memoire ? (sans le charger)"""
+    """Is the local model in memory already? (without loading it)"""
     return _model is not None
 
 
 def warm_local_voice() -> None:
-    """Monte la voix locale en tache de fond, sans faire attendre personne."""
+    """Bring the local voice up in the background, without holding anyone up."""
     if _model is not None or _model_error:
         return
     thread = threading.Thread(target=_load_model, daemon=True, name="ava-voix-locale")
@@ -883,15 +880,15 @@ def warm_local_voice() -> None:
 
 
 def synthesize(text: str, mood: str = "") -> Path | None:
-    """Rend un fichier audio jouable par afplay, ou None pour passer a `say`.
+    """Return an audio file afplay can play, or None to fall through to `say`.
 
-    ⚠️ **un seul chemin.** l'ancienne version enchainait quatre moteurs
-    (mistral -> chatterbox -> elevenlabs -> say) : chaque repli avait l'air
-    gratuit, mais ensemble ils rendaient le comportement imprevisible — la voix
-    changeait de timbre en cours de route selon qui avait repondu, et un incident
-    reseau se payait en cascade de timeouts avant d'arriver au dernier. avec un
-    moteur local plus rapide que tous les autres, il n'y a plus rien a rattraper :
-    `kokoro`, et `say` seulement si le modele lui-meme ne se charge pas.
+    ⚠️ **one path only.** the old version chained four engines
+    (mistral -> chatterbox -> elevenlabs -> say): each fallback looked free, but
+    together they made the behaviour unpredictable — the voice changed timbre
+    halfway through depending on who answered, and one network hiccup cost a
+    cascade of timeouts before reaching the last. with a local engine faster
+    than all the others there is nothing left to catch: `kokoro`, and `say` only
+    if the model itself won't load.
     """
     value = str(text or "").strip()
     if not value:
@@ -902,20 +899,20 @@ def synthesize(text: str, mood: str = "") -> Path | None:
     if engine == "kokoro":
         return _kokoro_audio(value)
     if engine == "chatterbox":
-        # ⚠️ plus de saut vers mistral ni elevenlabs : le timbre choisi est le
-        # timbre entendu. avant, une phrase que chatterbox ratait sortait avec
-        # une *autre* voix, et on croyait a un bug de la voix elle-meme.
+        # ⚠️ no more jumping to mistral or elevenlabs: the timbre you chose is
+        # the timbre you hear. a sentence chatterbox fumbled used to come out in
+        # a *different* voice, and it looked like a bug in the voice itself.
         return _chatterbox_audio(value)
     if engine == "mistral":
         found = _mistral_audio(value, mood or mood_for(value))
         if found:
             return found
-        # hors ligne, chatterbox prend le relais : autonome, mais il faut
-        # d'abord le monter en memoire. mesure : 8,9 s de chargement puis 9 s de
-        # synthese, soit **18 s de silence** apres un « ouvre spotify » — le
-        # temps que personne n'accepte d'attendre d'une assistante vocale. tant
-        # qu'il n'est pas chaud, la voix systeme repond tout de suite et le
-        # modele monte derriere ; les phrases suivantes retrouvent la vraie voix.
+        # offline, chatterbox takes over: self-contained, but it has to be
+        # loaded first. measured: 8.9 s to load then 9 s to synthesise, so
+        # **18 s of silence** after an "ouvre spotify" — longer than anyone will
+        # wait on a voice assistant. until it's warm the system voice answers
+        # right away and the model comes up behind it; the sentences after get
+        # the real voice back.
         if not local_voice_ready() and net.is_offline():
             warm_local_voice()
             return _eleven_audio(value)

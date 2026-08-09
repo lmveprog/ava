@@ -1,20 +1,20 @@
-"""l'actualite ia du briefing : fraiche, sourcee, et dite en francais.
+"""the ai news in the briefing: fresh, sourced, and said in french.
 
-l'ancienne version raclait deux pages html (mistral, openai) et prenait le
-premier lien datable. trois defauts, tous audibles au reveil :
+the old version scraped two html pages (mistral, openai) and took the first link
+it could date. three faults, all of them audible first thing in the morning:
 
-- **rien ne garantissait la fraicheur.** le 8 aout, ava annoncait une annonce du
-  4 aout comme « l'actualite » — et sans nouvelle publication, elle aurait
-  ressorti la meme pendant des semaines.
-- **la traduction passait par ollama**, qui ne tourne pas. les titres anglais
-  partaient donc tels quels dans une voix francaise : « Continuous voice
-  interaction with GPT Live » lu par une voix fr, c'est du bruit.
-- **la phrase se repetait** : « Mistral AI presente Shieldstral., selon
-  Mistral AI. »
+- **nothing guaranteed freshness.** on 8 august ava announced a 4 august post as
+  "the news" — and with nothing new published she'd have kept saying it for
+  weeks.
+- **translation went through ollama**, which isn't running. english headlines
+  therefore went straight into a french voice: "Continuous voice interaction
+  with GPT Live" read by a french voice is just noise.
+- **the sentence repeated itself**: "Mistral AI presente Shieldstral., selon
+  Mistral AI."
 
-ici on lit des **flux rss** (vraies dates de publication, pas de scraping), on
-refuse ce qui est trop vieux, on ecarte les billets de communication client, et
-on traduit avec le meme petit modele que le routage d'intentions.
+here we read **rss feeds** (real publication dates, no scraping), refuse
+anything too old, drop the customer-story posts, and translate with the same
+small model the intent router uses.
 """
 
 from __future__ import annotations
@@ -40,8 +40,8 @@ TRANSLATIONS_PATH = paths.cache_dir("ai_news_titles.json")
 USER_AGENT = "Mozilla/5.0 Ava/1.0"
 ATOM = "{http://www.w3.org/2005/Atom}"
 
-# les laboratoires d'abord (ils annoncent chez eux avant tout le monde), puis
-# deux sources de contexte. tous verifies : ce sont de vrais flux rss/atom.
+# the labs first (they announce at home before anyone else), then two context
+# sources. all checked: these are real rss/atom feeds.
 FEEDS = (
     ("Mistral AI", "https://mistral.ai/rss.xml"),
     ("OpenAI", "https://openai.com/news/rss.xml"),
@@ -51,13 +51,13 @@ FEEDS = (
     ("MIT Technology Review", "https://www.technologyreview.com/topic/artificial-intelligence/feed"),
 )
 
-# au-dela, ce n'est plus une actualite : mieux vaut le dire que de faire passer
-# une annonce de la semaine derniere pour la nouvelle du jour.
+# past this it isn't news any more: better to say so than to pass last week's
+# announcement off as today's story.
 MAX_AGE_DAYS = 6
 FRESH_HOURS = 48          # en dessous, on considere que c'est vraiment chaud
 
-# le cache n'est la que pour ne pas rappeler six flux a chaque reveil ; il doit
-# perimer vite, sinon on retombe sur le probleme qu'on essaie de corriger.
+# the cache is only there to avoid hitting six feeds on every wake-up; it has
+# to expire fast, or we're back to the problem we're trying to fix.
 CACHE_TTL_S = 3 * 3600
 
 
@@ -98,7 +98,7 @@ def _feed_items(source: str, url: str, timeout: float = 10.0) -> list[NewsItem]:
     response.raise_for_status()
     root = ET.fromstring(response.content)
     items: list[NewsItem] = []
-    # rss met <item>, atom met <entry> : on accepte les deux sans discuter.
+    # rss says <item>, atom says <entry>: take both without arguing.
     for node in (root.findall(".//item") or root.findall(f".//{ATOM}entry"))[:12]:
         title = (node.findtext("title") or node.findtext(f"{ATOM}title") or "").strip()
         link = (node.findtext("link") or "").strip()
@@ -115,11 +115,11 @@ def _feed_items(source: str, url: str, timeout: float = 10.0) -> list[NewsItem]:
 
 
 def fetch_items() -> list[NewsItem]:
-    """Tous les flux, a plat, du plus recent au plus ancien.
+    """Every feed, flattened, newest first.
 
-    Les six flux partent **ensemble** : lus l'un apres l'autre, un seul serveur
-    lent imposait son attente a tous les suivants, et le pire cas atteignait
-    six fois le timeout — juste pour une phrase du briefing.
+    The six feeds go out **together**: read one after another, a single slow
+    server made everyone behind it wait, and the worst case hit six times the
+    timeout — for one sentence of the briefing.
     """
     if not net.reachable("actu"):
         return []
@@ -142,9 +142,8 @@ def fetch_items() -> list[NewsItem]:
     return collected
 
 
-# les laboratoires publient aussi beaucoup de communication : temoignages
-# clients, partenariats, billets rh. ce n'est pas ce qu'on veut entendre au
-# reveil, meme si c'est publie du jour.
+# the labs also publish a lot of marketing: customer stories, partnerships, hr
+# posts. not what you want to hear first thing, however fresh it is.
 _FLUFF = (
     "how ", "working with", "from asking to doing", "putting ", " to work",
     "customer", "partnership", "webinar", "hiring", "we're joining",
@@ -158,7 +157,7 @@ _SUBSTANCE = (
 
 
 def relevance(title: str) -> int:
-    """Plus c'est haut, plus ca merite d'etre la nouvelle du jour."""
+    """The higher this is, the more it deserves to be the story of the day."""
     low = f" {title.lower()} "
     score = 0
     for marker in _SUBSTANCE:
@@ -183,11 +182,11 @@ def same_story(first: str, second: str) -> bool:
 
 
 def pick(items: list[NewsItem], previous_title: str = "") -> NewsItem | None:
-    """La meilleure nouvelle recente, en evitant celle deja racontee.
+    """The best recent story, avoiding the one already told.
 
-    On trie par pertinence *a l'interieur* de la fenetre de fraicheur, jamais
-    l'inverse : une annonce majeure d'il y a cinq jours ne doit pas passer
-    devant une vraie nouvelle d'hier.
+    We sort by relevance *inside* the freshness window, never the other way
+    round: a major announcement from five days ago must not jump ahead of a
+    genuine piece of news from yesterday.
     """
     recent = [item for item in items if item.age_hours <= MAX_AGE_DAYS * 24]
     if not recent:
@@ -200,7 +199,7 @@ def pick(items: list[NewsItem], previous_title: str = "") -> NewsItem | None:
 
 def freshness_phrase(published: datetime.datetime | None,
                      now: datetime.datetime | None = None) -> str:
-    """« ce matin », « hier »… — sans quoi une annonce de mardi sonne comme du jour."""
+    """"ce matin", "hier"… — without it, a tuesday post sounds like today's."""
     if published is None:
         return ""
     now = now or datetime.datetime.now(datetime.timezone.utc)
@@ -216,7 +215,7 @@ def freshness_phrase(published: datetime.datetime | None,
     return f"il y a {days} jours"
 
 
-# --- traduction des titres ----------------------------------------------------
+# --- turning headlines into sentences -----------------------------------------
 
 _translations_lock = threading.Lock()
 _translations: dict[str, str] | None = None
@@ -224,10 +223,10 @@ _translations: dict[str, str] | None = None
 TRANSLATE_MODEL = os.getenv("AVA_NLU_MODEL", "ministral-8b-latest").strip()
 BASE_URL = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1").strip()
 
-# ⚠️ un titre de presse n'est pas une phrase. « Réponse aux défis cyber
-# stratégiques futurs avec les capacités avancées » est un groupe nominal sans
-# verbe : ça se lit très bien des yeux et ça ne se dit pas. À l'oral, on attend
-# un sujet et un verbe — d'où une reformulation, et pas seulement une traduction.
+# ⚠️ a headline is not a sentence. "Réponse aux défis cyber stratégiques futurs
+# avec les capacités avancées" is a noun phrase with no verb: it reads fine with
+# your eyes and cannot be said out loud. Spoken, you expect a subject and a verb
+# — hence a rewrite, not just a translation.
 TRANSLATE_PROMPT = (
     "Réécris ce titre d'actualité en UNE phrase française, dite à l'oral, "
     "avec un sujet et un verbe conjugué, 20 mots maximum. "
@@ -238,10 +237,10 @@ TRANSLATE_PROMPT = (
 )
 
 
-# ⚠️ le modele repond en markdown des qu'il veut insister : « savent *quand*
-# intervenir ». A l'ecran ca passe ; a la voix, la synthese prononce
-# « asterisque ». On enleve toute la ponctuation d'emphase avant de garder la
-# phrase — c'est du texte destine a etre **dit**, jamais affiche seul.
+# ⚠️ the model answers in markdown the moment it wants to stress something:
+# "savent *quand* intervenir". On screen that's fine; out loud, the synthesiser
+# says "asterisk". We strip every emphasis mark before keeping the sentence —
+# this is text meant to be **spoken**, never shown on its own.
 _EMPHASIS = str.maketrans({"*": None, "_": None, "`": None, "#": None})
 
 
@@ -285,12 +284,12 @@ def looks_english(title: str) -> bool:
 
 
 def translate_title(title: str, timeout: float = 8.0) -> str:
-    """Rend le titre **dicible** : traduit s'il le faut, et surtout reformule.
+    """Make the headline **sayable**: translate if needed, and above all rewrite.
 
-    Passe par le meme petit modele que le routage d'intentions : il est deja
-    joignable, il repond en une demi-seconde, et le resultat est garde sur le
-    disque — un titre ne se retravaille jamais deux fois. Hors ligne, on garde
-    le titre brut : approximatif, mais toujours mieux que rien.
+    Goes through the same small model as the intent router: it's already
+    reachable, it answers in half a second, and the result is kept on disk — a
+    headline is never reworked twice. Offline we keep the raw title: rough, but
+    still better than nothing.
     """
     value = " ".join(str(title or "").split())
     if not value:
@@ -330,7 +329,7 @@ def translate_title(title: str, timeout: float = 8.0) -> str:
     return translated
 
 
-# --- ce que le briefing consomme ----------------------------------------------
+# --- what the briefing consumes -----------------------------------------------
 
 _cache_lock = threading.Lock()
 
@@ -354,7 +353,7 @@ def _write_cache(payload: dict) -> None:
 
 
 def current(force: bool = False) -> dict:
-    """L'actualite du moment, sous la forme attendue par la scene de demarrage."""
+    """The current story, in the shape the startup scene expects."""
     with _cache_lock:
         cached = _read_cache()
         fresh_enough = (
@@ -384,12 +383,12 @@ def current(force: bool = False) -> dict:
 
 
 def sentence(item: dict | None = None) -> str:
-    """La phrase du briefing, faite pour etre *dite*.
+    """The briefing sentence, built to be *spoken*.
 
-    On annonce d'abord d'ou et de quand ca vient, puis le titre comme une phrase
-    a part entiere. Coller le titre derriere un deux-points donnait des enfilades
-    du genre « … Hugging Face : TutorMoments : les tuteurs… » — deux deux-points
-    dans une seule respiration — et un « ?. » quand le titre etait une question.
+    Where and when it comes from first, then the headline as a sentence in its
+    own right. Sticking the headline behind a colon produced strings like
+    "… Hugging Face : TutorMoments : les tuteurs…" — two colons in one breath —
+    and a "?." whenever the headline was a question.
     """
     data = current() if item is None else item
     title = str(data.get("title", "")).strip().rstrip(" .")
@@ -398,35 +397,34 @@ def sentence(item: dict | None = None) -> str:
     source = str(data.get("source", "")).strip()
     when = str(data.get("freshness", "")).strip()
 
-    # ⚠️ l'ancienne version coupait apres l'introduction : « Côté intelligence
-    # artificielle, avant-hier chez OpenAI. » puis le titre. Le premier morceau
-    # n'a pas de verbe, donc la voix marquait un point sur une phrase inachevee
-    # — a l'oreille, on croyait qu'elle s'etait interrompue. Tout tient
-    # maintenant dans **une seule** phrase, ou la fraicheur et la source sont
-    # des complements, pas des annonces.
+    # ⚠️ the old version cut after the introduction: "Côté intelligence
+    # artificielle, avant-hier chez OpenAI." and then the headline. The first
+    # piece has no verb, so the voice put a full stop on an unfinished sentence
+    # — it sounded like she'd been interrupted. It's all **one** sentence now,
+    # where the freshness and the source are modifiers, not announcements.
     lead = "Côté intelligence artificielle"
     if when:
         lead += f", {when}"
-    # repeter la source quand elle est deja dans le titre sonne faux :
-    # « Mistral AI presente Shieldstral, selon Mistral AI ».
+    # repeating the source when it's already in the headline rings false:
+    # "Mistral AI presente Shieldstral, selon Mistral AI".
     if source and source.lower() not in title.lower():
-        # toujours « chez X » : sans la preposition, « avant-hier, Hugging Face,
-        # TutorMoments se demande… » enfile trois groupes separes par des
-        # virgules et on ne sait plus lequel est la source.
+        # always "chez X": without the preposition, "avant-hier, Hugging Face,
+        # TutorMoments se demande…" strings three comma-separated groups
+        # together and you lose track of which one is the source.
         lead += f", chez {source}"
     body = _as_clause(title)
     if not title.endswith(("?", "!")):
         body += "."
-    # ⚠️ surtout pas de deux-points ici : les titres en portent souvent un
-    # (« TutorMoments : les tuteurs IA »), et deux dans une respiration, ca
-    # s'entend. Une virgule enchaine sans marquer d'arret.
+    # ⚠️ definitely no colon here: headlines often carry one already
+    # ("TutorMoments : les tuteurs IA"), and two in one breath is audible. A
+    # comma carries on without calling a halt.
     return f"{lead}, {body}"
 
 
-# les mots qui, en tete de titre, ne sont qu'une majuscule de debut de phrase.
-# tout le reste est presume nom propre — « OpenAI », « Mistral AI », « GPT » —
-# et **ne doit pas** etre mis en minuscule : c'est le nom de l'entreprise dont
-# on parle, et le test qui comptait les repetitions de source l'a montre.
+# words that, at the head of a headline, are only a sentence-initial capital.
+# everything else is assumed to be a proper noun — "OpenAI", "Mistral AI", "GPT"
+# — and **must not** be lowercased: it's the name of the company being talked
+# about, as the test counting source repetitions made clear.
 _SENTENCE_STARTERS = {
     "le", "la", "les", "un", "une", "des", "du", "de", "ce", "cet", "cette",
     "ces", "il", "elle", "on", "ils", "elles", "cela", "leur", "leurs", "son",
@@ -436,7 +434,7 @@ _SENTENCE_STARTERS = {
 
 
 def _as_clause(title: str) -> str:
-    """Enchaine le titre apres une virgule, sans casser les noms propres."""
+    """Carry the headline on after a comma, without breaking proper nouns."""
     first = title.split(" ", 1)[0].strip(",;:")
     if first.lower() in _SENTENCE_STARTERS:
         return title[0].lower() + title[1:]

@@ -1,23 +1,21 @@
-"""ava dans la barre de menus, comme n'importe quelle autre extension macos.
+"""ava in the menu bar, like any other macos extension.
 
-avant, ava etait une fenetre pywebview posee sur le bureau : elle ressemblait a
-un script python lance a la main, et il n'y avait aucun geste evident pour s'en
-debarrasser. desormais c'est un `NSStatusItem` en haut a droite, a cote de
-prometheus et des autres : l'icone dit ce qu'ava est en train de faire, le clic
-gauche ouvre et referme le panneau, le clic droit donne le menu.
+ava used to be a pywebview window sitting on the desktop: she looked like a
+python script somebody had started by hand, and there was no obvious gesture for
+getting rid of her. now she's an `NSStatusItem` up in the top right next to the
+others — the icon says what she's doing, left click opens and closes the panel,
+right click gives the menu.
 
-deux details qui font toute la difference :
+two details make all the difference:
 
-- **politique d'activation « accessory »** : plus d'icone dans le dock, plus de
-  nom dans la barre de menus quand la fenetre a le focus. c'est ce que fait un
-  `LSUIElement` dans un vrai bundle .app, sauf qu'ici on n'en a pas — on le
-  demande a l'execution.
-- **l'icone suit l'etat** (au repos, ecoute, reflexion, parole) : c'est le seul
-  retour visuel qui reste quand le panneau est ferme.
+- **the "accessory" activation policy**: no dock icon, no app name in the menu
+  bar when the window has focus. that's what `LSUIElement` does in a real .app
+  bundle, except we don't have one here — so we ask for it at runtime.
+- **the icon follows the state** (idle, listening, thinking, speaking): it's the
+  only visual feedback left once the panel is closed.
 
-tout passe par `AppHelper.callAfter` : cocoa n'accepte de toucher a l'interface
-que depuis le thread principal, et ava appelle ces fonctions depuis ses threads
-audio.
+everything goes through `AppHelper.callAfter`: cocoa only lets you touch the ui
+from the main thread, and ava calls these functions from her audio threads.
 """
 
 from __future__ import annotations
@@ -28,15 +26,15 @@ try:
     import AppKit
     import objc
     from PyObjCTools import AppHelper
-except Exception:  # pragma: no cover - hors macos, la barre de menus n'existe pas
+except Exception:  # pragma: no cover - off macos there is no menu bar
     AppKit = None
     objc = None
     AppHelper = None
 
 
-# l'icone parle a la place du panneau quand il est ferme. on reste sur des
-# symboles systeme : ils s'adaptent tout seuls au theme clair/sombre, a la
-# taille de la barre et au mode « reduire les animations ».
+# the icon speaks for the panel while it's closed. we stay on system symbols:
+# they adapt on their own to light/dark, to the bar's height and to "reduce
+# motion".
 STATE_SYMBOLS = {
     "dormant": "moon.zzz",
     "idle": "waveform.circle",
@@ -69,13 +67,13 @@ _policy_set = False
 
 
 def set_accessory_policy() -> bool:
-    """Fait d'ava une extension : ni icone dans le dock, ni menu applicatif.
+    """Turn ava into an extension: no dock icon, no application menu.
 
-    **A appeler avant de creer la fenetre.** Cocoa masque les fenetres deja
-    ouvertes quand on passe de « regular » a « accessory » : appliquee apres
-    coup, la bascule faisait disparaitre le panneau d'ava sans le moindre
-    message d'erreur. C'est l'equivalent a l'execution du `LSUIElement` d'un
-    vrai bundle .app, qu'on n'a pas ici.
+    **Call this before creating the window.** Cocoa hides windows that are
+    already open when you go from "regular" to "accessory", so applying it
+    afterwards made ava's panel vanish without so much as an error. It's the
+    runtime equivalent of `LSUIElement` in a real .app bundle, which we don't
+    have here.
     """
     global _policy_set
     if not available() or _policy_set:
@@ -89,9 +87,9 @@ def set_accessory_policy() -> bool:
     return _policy_set
 
 
-# --- la cible objective-c des elements de menu --------------------------------
-# pyobjc exige un vrai objet objc pour recevoir les actions. on lui passe un
-# dictionnaire de callables python, ce qui evite d'importer ava ici.
+# --- the objective-c target for the menu items --------------------------------
+# pyobjc needs a real objc object to receive the actions. we hand it a dict of
+# python callables, which keeps this file from having to import ava.
 
 if available():
 
@@ -114,7 +112,7 @@ if available():
                 print(f"[barre de menus] action « {name} » en échec : {exc}")
 
         def statusClicked_(self, sender):
-            # clic droit (ou ctrl+clic) = menu, clic gauche = ouvrir/fermer.
+            # right click (or ctrl+click) = menu, left click = open/close.
             event = AppKit.NSApp.currentEvent()
             right = False
             if event is not None:
@@ -145,7 +143,7 @@ else:  # pragma: no cover
 
 
 class MenuBar:
-    """L'element de barre de menus et son menu contextuel."""
+    """The status item and its context menu."""
 
     def __init__(self) -> None:
         self._item = None
@@ -161,10 +159,10 @@ class MenuBar:
     # --- installation ---------------------------------------------------------
 
     def install(self, actions: dict[str, Callable[[], object]]) -> bool:
-        """Cree l'element de barre de menus. A appeler depuis le thread principal.
+        """Create the status item. Must be called from the main thread.
 
-        Renvoie False hors macos : ava continue alors sans barre de menus plutot
-        que de refuser de demarrer.
+        Returns False off macos: ava then carries on without a menu bar rather
+        than refusing to start.
         """
         if not available():
             return False
@@ -172,10 +170,10 @@ class MenuBar:
         if AppKit.NSThread.isMainThread():
             self._install_now(payload)
             return True
-        # pywebview declenche son evenement `loaded` depuis un thread a lui :
-        # sans attendre, l'appelant placerait le panneau avant que l'icone
-        # existe, donc sans ancre — et ava atterrissait sur le mauvais ecran.
-        # la boucle cocoa tourne deja (webview.start), l'attente est sure.
+        # pywebview fires its `loaded` event from a thread of its own: without
+        # waiting, the caller would place the panel before the icon exists, so
+        # with no anchor — and ava landed on the wrong screen. the cocoa loop is
+        # already running (webview.start), so waiting here is safe.
         import threading
         done = threading.Event()
 
@@ -219,7 +217,7 @@ class MenuBar:
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
         self._add(menu, "Parler à Ava", "startListening:")
-        # de quoi couper un briefing de trente secondes sans tuer ava.
+        # enough to cut a thirty-second briefing short without killing ava.
         self._add(menu, "La faire taire", "hushAva:", key="."),
         self._toggle_item = self._add(menu, "Masquer le panneau", "togglePanel:")
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
@@ -239,14 +237,14 @@ class MenuBar:
         menu.addItem_(item)
         return item
 
-    # --- pilotage depuis ava --------------------------------------------------
+    # --- driven from ava ------------------------------------------------------
 
     def show_menu(self) -> None:
-        """Deroule le menu sous l'icone (clic droit)."""
+        """Drop the menu down under the icon (right click)."""
         if self._item is None or self._menu is None:
             return
-        # on accroche le menu le temps du clic seulement : sinon le clic gauche
-        # ouvrirait le menu au lieu d'appeler notre action.
+        # attach the menu for the duration of the click only: otherwise a left
+        # click would open the menu instead of calling our action.
         self._item.setMenu_(self._menu)
         self._item.button().performClick_(None)
         self._item.setMenu_(None)
@@ -269,8 +267,8 @@ class MenuBar:
                 image = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(
                     FALLBACK_SYMBOL, "Ava")
             if image is not None:
-                # « template » : macos recolore l'icone selon le fond de la
-                # barre, donc elle reste lisible en clair comme en sombre.
+                # "template": macos recolours the icon against the bar's
+                # background, so it stays readable in light and in dark.
                 image.setTemplate_(True)
                 self._item.button().setImage_(image)
             label = STATE_LABELS.get(self._state, "Prête")
@@ -309,10 +307,10 @@ class MenuBar:
                 "Masquer le panneau" if self._panel_open else "Afficher le panneau")
 
     def anchor(self) -> tuple[float, float, float, float] | None:
-        """Cadre de l'icone en coordonnees ecran, pour caler le panneau dessous.
+        """The icon's frame in screen coordinates, to hang the panel under it.
 
-        C'est ce qui fait qu'ava tombe *sous son icone* et pas dans un coin
-        arbitraire, meme sur un ecran externe ou avec une encoche.
+        This is what makes ava drop *under her own icon* rather than into some
+        arbitrary corner, even on an external display or around a notch.
         """
         if self._item is None:
             return None
@@ -322,10 +320,10 @@ class MenuBar:
             if window is None:
                 return None
             frame = window.convertRectToScreen_(button.bounds())
-            # juste apres la creation, la barre n'a pas encore dispose l'icone et
-            # renvoie (0, 0). une icone de barre de menus n'est jamais en bas a
-            # gauche de l'ecran principal : on prefere avouer qu'on ne sait pas
-            # encore, plutot que d'envoyer le panneau au mauvais endroit.
+            # right after creation the bar hasn't laid the icon out yet and
+            # returns (0, 0). a menu bar icon is never at the bottom left of the
+            # main screen, so we'd rather admit we don't know yet than send the
+            # panel somewhere wrong.
             if frame.origin.x == 0 and frame.origin.y == 0:
                 return None
             return (frame.origin.x, frame.origin.y,
@@ -338,16 +336,15 @@ MENU_BAR = MenuBar()
 
 
 def quit_ava() -> None:
-    """Arrete ava jusqu'au prochain demarrage de session.
+    """Stop ava until the next login.
 
-    Il suffit de sortir proprement : le launchagent est passe en
-    `KeepAlive = {SuccessfulExit: false}`, donc un code de sortie 0 ne declenche
-    pas de relance, alors qu'un plantage en declenche toujours une.
+    Exiting cleanly is enough: the launch agent is set to
+    `KeepAlive = {SuccessfulExit: false}`, so an exit code of 0 doesn't trigger
+    a relaunch, while a crash still does.
 
-    On ne fait surtout **pas** `launchctl bootout` ici : la commande laisse le
-    service marque « disabled » dans le domaine utilisateur, et ava ne repartait
-    plus du tout au demarrage suivant — il fallait un `launchctl enable` a la
-    main pour la ressusciter.
+    We very deliberately do **not** `launchctl bootout` here: that leaves the
+    service marked "disabled" in the user domain, and ava then never came back
+    at the next login — it took a manual `launchctl enable` to revive her.
     """
     if available():
         AppKit.NSApp.terminate_(None)
