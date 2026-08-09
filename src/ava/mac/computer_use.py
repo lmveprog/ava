@@ -1,4 +1,4 @@
-"""actions ordinateur macos, limitees a une liste blanche explicite."""
+"""mac actions, held to an explicit allowlist and nothing else."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def parse_computer_intent(text: str) -> ComputerIntent | None:
         command,
     )
     if type_match:
-        # on extrait depuis la phrase originale pour conserver accents et casse.
+        # pull it out of the original sentence so accents and case survive.
         original = re.sub(
             r"^(?:écris|ecris|tape|saisis|dicte)(?:\s+le\s+texte)?\s+",
             "",
@@ -94,7 +94,7 @@ def parse_computer_intent(text: str) -> ComputerIntent | None:
                 "Je vais saisir ce texte puis l'envoyer."
                 if submit else "Je vais saisir ce texte dans l'application active."
             ),
-            # la saisie seule reste reversible ; l'envoi ne l'est pas toujours.
+            # typing on its own is reversible; sending it is not always.
             requires_confirmation=submit,
         )
 
@@ -154,7 +154,7 @@ def parse_computer_intent(text: str) -> ComputerIntent | None:
 
 
 class MacComputerController:
-    """execute uniquement les actions produites par ``parse_computer_intent``."""
+    """Runs nothing but the intents ``parse_computer_intent`` produced."""
 
     _KEY_CODES = {"return": 36, "escape": 53, "tab": 48, "up": 126, "down": 125}
     _ACCESSIBILITY_ACTIONS = {
@@ -296,7 +296,7 @@ end run'''
 
 
 class ComputerUseEngine:
-    """ajoute expiration et confirmation vocale aux actions sensibles."""
+    """Adds expiry and a spoken confirmation on top of the risky actions."""
 
     CONFIRM_WORDS = {"confirme", "oui confirme", "vas y", "execute", "fais le"}
     CANCEL_WORDS = {"annule", "non annule", "laisse tomber", "stop"}

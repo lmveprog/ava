@@ -1,4 +1,4 @@
-"""verrou de processus pour garantir une seule instance d'ava."""
+"""a process lock, so only one ava ever runs at a time."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class SingleInstanceLock:
 
     def __enter__(self):
         if not self.acquire():
-            raise RuntimeError("ava est deja lancee")
+            raise RuntimeError("ava is already running")
         return self
 
     def __exit__(self, exc_type, exc, traceback):

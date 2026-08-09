@@ -1,7 +1,7 @@
-# overlay.py - petite fenetre transparente always-on-top (en haut a droite)
-# qui affiche l'orbe d'ava. pilotee depuis le backend via evaluate_js.
-# doit tourner sur le THREAD PRINCIPAL (contrainte macos/webkit) : appeler
-# start() en dernier depuis main(), le reste du programme dans des threads.
+# the small transparent always-on-top window (top right) that shows ava's orb.
+# driven from the backend through evaluate_js.
+# must run on the MAIN THREAD (macos/webkit rule): call start() last from
+# main(), and keep the rest of the program on threads.
 
 import base64
 import json
@@ -19,7 +19,7 @@ import webview
 try:
     import AppKit
     from PyObjCTools import AppHelper
-except Exception:  # pragma: no cover - Ava cible macOS, fallback pywebview sinon
+except Exception:  # pragma: no cover - ava targets macos; plain pywebview otherwise
     AppKit = None
     AppHelper = None
 
@@ -34,14 +34,14 @@ HEIGHT = 590
 START_WIDTH = 720
 START_HEIGHT = 520
 MARGIN = 12
-TOP = 38  # sous la barre de menu macos
-ANCHOR_GAP = 6  # le petit jour entre l'icone et le haut du panneau
+TOP = 38  # just under the macos menu bar
+ANCHOR_GAP = 6  # the sliver of daylight between the icon and the panel
 _target_position = (0, TOP)
 _panel_visible = True
 
 
 class _Api:
-    """pont expose au js du panneau de reglages -> store de config."""
+    """the bridge the settings panel's js talks to -> the config store."""
 
     def get_config(self):
         try:
@@ -78,9 +78,9 @@ class _Api:
         except Exception as exc:  # noqa: BLE001
             return {"accepted": False, "error": str(exc)}
 
-    # --- connecteur google (agenda) ---------------------------------------
-    # begin_connect rend la main tout de suite et travaille en fond : le
-    # panneau se contente de repasser sur google_status() toutes les secondes.
+    # --- google connector (calendar) --------------------------------------
+    # begin_connect returns immediately and works in the background: the panel
+    # just polls google_status() once a second.
 
     def google_status(self):
         try:
@@ -104,10 +104,10 @@ class _Api:
             return {"connected": False, "error": str(exc)}
 
     def test_voice(self, voice=None):
-        """Enregistre les reglages de voix puis en joue un extrait.
+        """Save the voice settings, then play a sample of them.
 
-        Rend la main tout de suite : la synthese locale prend quelques secondes
-        et le panneau ne doit pas se figer pendant ce temps.
+        Returns immediately: local synthesis takes a few seconds and the panel
+        must not freeze while it happens.
         """
         try:
             from ava.config import STORE
@@ -152,11 +152,11 @@ def set_handlers(
     voice_handler: Callable[[], object] | None = None,
     ready_handler: Callable[[], object] | None = None,
 ) -> None:
-    """Branche les actions du mini-plugin sans importer ``ava`` en retour.
+    """Wire the panel's actions up without importing ``app`` back the other way.
 
-    `ready_handler` se declenche quand la fenetre est affichee : c'est le moment
-    ou l'on peut installer la barre de menus, pas avant (l'application cocoa
-    n'existe pas encore).
+    `ready_handler` fires once the window is on screen: that's the moment the
+    menu bar can be installed, and not before — the cocoa application doesn't
+    exist yet.
     """
     global _command_handler, _voice_handler, _ready_handler
     _command_handler = command_handler
@@ -186,11 +186,12 @@ def _layout_origin(
     placement: str,
     anchor: tuple[float, float, float, float] | None = None,
 ) -> tuple[int, int]:
-    """Calcule une origine Cocoa dans la zone visible de l'ecran courant.
+    """Work out a cocoa origin inside the visible area of the current screen.
 
-    `anchor` porte le cadre de l'icone de barre de menus. Quand il est fourni, le
-    panneau tombe **sous son icone** plutot que dans le coin de l'ecran : c'est
-    ce qui fait la difference entre une extension et une fenetre posee la.
+    `anchor` carries the frame of the menu bar icon. When it's there, the panel
+    drops **under its own icon** rather than into the corner of the screen —
+    that's the difference between an extension and a window someone left lying
+    around.
     """
     if placement == "center":
         x = screen_x + (screen_width - width) / 2
@@ -199,8 +200,8 @@ def _layout_origin(
         anchor_x, anchor_y, anchor_width, _anchor_height = anchor
         x = anchor_x + anchor_width / 2 - width / 2
         y = anchor_y - height - ANCHOR_GAP
-        # l'icone peut etre tout au bord (ou derriere l'encoche) : on rentre le
-        # panneau dans la zone visible sans le decoller de son icone.
+        # the icon can sit right on the edge (or behind the notch): pull the
+        # panel back into view without unsticking it from its icon.
         x = max(screen_x + MARGIN, min(x, screen_x + screen_width - width - MARGIN))
         y = max(screen_y + MARGIN, min(y, screen_y + screen_height - height))
     else:
@@ -210,16 +211,16 @@ def _layout_origin(
 
 
 def _menu_bar_anchor():
-    """Le cadre de l'icone d'ava, si la barre de menus est bien installee."""
+    """The frame of ava's icon, if the menu bar is actually up."""
     try:
         from ava.ui.menubar import MENU_BAR
         return MENU_BAR.anchor()
-    except Exception:  # noqa: BLE001 - sans barre de menus on garde le coin
+    except Exception:  # noqa: BLE001 - no menu bar, so we keep the corner
         return None
 
 
 def _screen_holding(anchor):
-    """L'ecran qui contient le centre de l'ancre, s'il y en a un."""
+    """The screen holding the centre of the anchor, if there is one."""
     if AppKit is None or anchor is None:
         return None
     x, y, width, height = anchor
@@ -234,12 +235,12 @@ def _screen_holding(anchor):
 
 
 def _place_window(width: int, height: int, placement: str) -> None:
-    """Redimensionne et place Ava sur l'ecran qui la contient vraiment.
+    """Resize and place Ava on the screen that actually holds her.
 
-    Le calcul historique via Finder melangeait les coordonnees de bureau et
-    celles de pywebview, surtout avec Retina ou plusieurs ecrans. Cocoa fournit
-    directement la zone visible et son origine ; on applique donc le cadre en
-    une seule operation sur le thread principal.
+    The old Finder-based maths mixed desktop coordinates with pywebview's, which
+    fell apart on Retina and on multiple displays. Cocoa hands us the visible
+    area and its origin directly, so the frame goes on in one operation on the
+    main thread.
     """
     if _window is None:
         return
@@ -247,17 +248,17 @@ def _place_window(width: int, height: int, placement: str) -> None:
     if native is not None and AppKit is not None and AppHelper is not None:
         def apply_native_frame() -> None:
             try:
-                # l'ancre se lit ici, donc sur le thread principal : c'est de la
-                # geometrie de vue, cocoa n'aime pas qu'on la consulte ailleurs.
-                # elle sert toujours a choisir l'ecran (celui qui porte l'icone)
-                # mais ne commande la position que pour le panneau — la scene de
-                # demarrage, elle, se centre.
+                # the anchor is read here, on the main thread: it's view
+                # geometry, and cocoa dislikes being asked anywhere else. it
+                # still picks the screen (the one holding the icon) but only
+                # drives the position for the panel — the startup scene centres
+                # itself.
                 anchor = _menu_bar_anchor()
-                # avec deux ecrans, l'ancre et la fenetre ne vivaient pas sur le
-                # meme : on prenait le x de l'icone (ecran du haut) et le cadre
-                # de l'ecran ou trainait la fenetre (ecran du bas), et ava
-                # atterrissait hors champ. l'ancre commande : on se cale sur
-                # l'ecran qui porte vraiment l'icone.
+                # with two displays the anchor and the window didn't live on
+                # the same one: we took the icon's x (top screen) and the frame
+                # of wherever the window happened to be (bottom screen), and ava
+                # landed off-screen. the anchor decides — we follow the display
+                # that actually carries the icon.
                 screen = (_screen_holding(anchor) if anchor is not None else None)
                 screen = screen or native.screen() or AppKit.NSScreen.mainScreen()
                 visible = screen.visibleFrame()
@@ -287,7 +288,7 @@ def _place_window(width: int, height: int, placement: str) -> None:
         AppHelper.callAfter(apply_native_frame)
         return
 
-    # Fallback portable pour les tests ou un backend pywebview non-Cocoa.
+    # portable fallback, for tests or a non-cocoa pywebview backend.
     sw, sh = _screen_size()
     _window.resize(width, height)
     if placement == "center":
@@ -298,12 +299,12 @@ def _place_window(width: int, height: int, placement: str) -> None:
 
 def start(html_path: str) -> None:
     global _window, _target_position
-    # avant toute fenetre : ava doit deja etre une extension. bascule apres
-    # coup, cocoa masquerait la fenetre qu'on vient de creer.
+    # before any window exists: ava has to already be an extension. switching
+    # afterwards, cocoa would hide the window we just made.
     try:
         from ava.ui.menubar import set_accessory_policy
         set_accessory_policy()
-    except Exception:  # noqa: BLE001 - hors macos on continue sans
+    except Exception:  # noqa: BLE001 - off macos we just carry on without
         pass
     sw, sh = _screen_size()
     x = max(0, sw - WIDTH - MARGIN)
@@ -313,23 +314,23 @@ def start(html_path: str) -> None:
     initial_height = START_HEIGHT if has_startup else HEIGHT
 
     def _create():
-        # PAS de x/y ici : donner une position a la creation declenche un
-        # windowDidMove alors que la fenetre n'est pas encore rattachee a un
-        # ecran -> crash cocoa "'NoneType' object has no attribute 'frame'".
-        # on la deplace apres coup, une fois affichee (voir _on_loaded).
+        # NO x/y here: giving a position at creation fires a windowDidMove
+        # while the window isn't attached to a screen yet -> cocoa crashes with
+        # "'NoneType' object has no attribute 'frame'". we move it afterwards,
+        # once it's on screen (see _on_loaded).
         return webview.create_window(
             "Ava", html_path,
             width=initial_width, height=initial_height,
-            # easy_drag : on peut attraper la fenetre pour la deplacer (les champs
-            # de saisie restent exclus, donc taper/selectionner marche toujours).
+            # easy_drag: you can grab the window to move it (input fields are
+            # excluded, so typing and selecting still work).
             frameless=True, easy_drag=True, on_top=True,
             transparent=True, background_color="#000000",
             resizable=False, focus=True, js_api=_Api(),
         )
 
-    # relance rapide : une fenetre pywebview qui vient d'etre tuee peut laisser
-    # NSScreen.mainScreen() a None un court instant ("NoneType frame"). petit
-    # delai + reessai pour ne pas tomber en "mode sans interface" pour rien.
+    # quick restart: a pywebview window that was just killed can leave
+    # NSScreen.mainScreen() at None for a moment ("NoneType frame"). small delay
+    # and a retry, so we don't fall back to headless mode for nothing.
     last_exc = None
     for attempt in range(10):
         try:
@@ -344,18 +345,18 @@ def start(html_path: str) -> None:
                 pass
             time.sleep(0.8)
     if _window is None:
-        raise last_exc if last_exc else RuntimeError("fenetre overlay introuvable")
+        raise last_exc if last_exc else RuntimeError("no overlay window")
 
     def _on_loaded():
-        # la barre de menus d'abord : le placement du panneau se cale sur
-        # l'icone, donc elle doit exister avant qu'on positionne la fenetre.
+        # menu bar first: the panel's placement keys off the icon, so it has to
+        # exist before we position the window.
         if _ready_handler is not None:
             try:
                 _ready_handler()
             except Exception as exc:  # noqa: BLE001
                 print(f"[overlay] preparation interrompue : {exc}")
-        # La scene de demarrage nait au centre. Le mini-plugin rejoint ensuite
-        # son emplacement discret en haut a droite.
+        # the startup scene is born in the middle. the panel then goes off to
+        # its quiet spot in the top right corner.
         try:
             _place_window(
                 START_WIDTH if has_startup else WIDTH,
@@ -364,10 +365,10 @@ def start(html_path: str) -> None:
             )
         except Exception:
             pass
-        # fond transparent + on prend la main (annule la demo).
+        # transparent background, and we take over (cancels the demo).
         _eval("window.avaOverlayMode && avaOverlayMode()")
-        # Le mini-plugin est le point d'entree principal : visible et pret a
-        # recevoir du texte des le lancement, sauf choix explicite contraire.
+        # the panel is the main way in: visible and ready to take text from
+        # launch, unless you explicitly asked otherwise.
         start_hidden = False
         ui_settings = {}
         try:
@@ -386,16 +387,16 @@ def start(html_path: str) -> None:
             _eval("window.avaIdle && avaIdle()")
 
     _window.events.loaded += _on_loaded
-    # meme protection sur le demarrage de la boucle gui : l'ecran peut ne pas
-    # etre pret juste apres la mort d'une instance precedente.
+    # same guard on starting the gui loop: the screen may not be ready right
+    # after a previous instance died.
     for attempt in range(3):
         try:
-            webview.start()  # bloque le thread principal jusqu'a fermeture
+            webview.start()  # blocks the main thread until the window closes
             return
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             time.sleep(1.0)
-    raise last_exc if last_exc else RuntimeError("gui overlay indemarrable")
+    raise last_exc if last_exc else RuntimeError("overlay gui would not start")
 
 
 def _eval(code: str) -> None:
@@ -411,10 +412,10 @@ def _j(v) -> str:
     return json.dumps(v, ensure_ascii=True)
 
 
-# --- api appelee par le backend --------------------------------------------
+# --- the api the backend calls ---------------------------------------------
 
 def prepare_startup(payload: dict) -> None:
-    """Memorise la scene avant la creation de la fenetre."""
+    """Remember the scene before the window is created."""
     global _startup_payload
     _startup_payload = dict(payload or {})
 
@@ -427,8 +428,8 @@ def startup(payload: dict) -> None:
 
 
 def startup_brief(text: str, ms: int = 0, delays=None) -> None:
-    # revele le transcript du briefing en le calant sur la parole : `delays`
-    # porte l'instant de chaque mot, mesure sur l'audio reellement genere.
+    # reveal the briefing transcript in step with the speech: `delays` carries
+    # the moment of each word, measured on the audio actually generated.
     marks = [int(v) for v in (delays or [])][:400]
     _eval(f"window.avaStartupBrief && avaStartupBrief({_j(text)}, {int(ms)}, {_j(marks)})")
 
@@ -439,18 +440,18 @@ def finish_startup() -> None:
     _eval("window.avaStartupDone && avaStartupDone()")
     _startup_payload = None
 
-# --- le panneau s'ouvre et se ferme depuis la barre de menus -----------------
+# --- the panel opens and closes from the menu bar ---------------------------
 
 def panel_visible() -> bool:
     return _panel_visible
 
 
 def set_panel_visible(visible: bool) -> bool:
-    """Sort la fenetre de l'ecran, ou la ramene sous son icone.
+    """Take the window off the screen, or bring it back under its icon.
 
-    On retire vraiment la fenetre (`orderOut`) plutot que de vider son contenu :
-    tant qu'elle est la, elle intercepte les clics et reste dans le selecteur de
-    fenetres. « on peut l'enlever quand on veut » veut dire qu'elle disparait.
+    We really remove the window (`orderOut`) rather than emptying it: while it's
+    there it swallows clicks and stays in the window switcher. "you can get rid
+    of it whenever you want" has to mean it actually goes away.
     """
     global _panel_visible
     _panel_visible = bool(visible)
@@ -458,14 +459,15 @@ def set_panel_visible(visible: bool) -> bool:
         return _panel_visible
     native = getattr(_window, "native", None)
     if native is None or AppKit is None or AppHelper is None:
-        # backend non-cocoa (tests) : on se contente de l'etat logique.
+        # non-cocoa backend (tests): the logical state is all we track.
         return _panel_visible
 
     def apply() -> None:
         try:
             if _panel_visible:
-                # on la replace avant de la montrer : l'icone a pu bouger (ecran
-                # externe branche, extension ajoutee a cote) pendant l'absence.
+                # reposition before showing: the icon may have moved while we
+                # were away (external display plugged in, another extension
+                # added next to it).
                 _place_window(WIDTH, HEIGHT, "top_right")
                 native.orderFrontRegardless()
             else:
@@ -482,7 +484,7 @@ def toggle_panel() -> bool:
 
 
 def open_settings() -> None:
-    """Ramene le panneau et deroule les reglages (entree du menu)."""
+    """Bring the panel back and open the settings (menu entry)."""
     set_panel_visible(True)
     _eval("window.avaOpenSettings && avaOpenSettings()")
 
@@ -499,13 +501,13 @@ def idle() -> None:
 
 
 def dormant() -> None:
-    # "eteinte" : cache completement la pilule et la carte de demarrage.
-    # n'importe quel autre etat (set_state/boot) les reveille.
+    # "off": hides the pill and the startup card entirely. any other state
+    # (set_state/boot) wakes them back up.
     _eval("window.avaDormant && avaDormant()")
 
 
 def hide() -> None:
-    """Cache temporairement le panneau, notamment avant une capture d'ecran."""
+    """Hide the panel for a moment — before a screenshot, mostly."""
     _eval("window.avaHide && avaHide()")
 
 
@@ -518,8 +520,8 @@ def transcript(text: str, final: bool = False) -> None:
 
 
 def message(role: str, text: str, illustration: str = "", delays=None) -> None:
-    # `delays` : instant de chaque mot, mesure sur la voix generee, pour que la
-    # bulle se remplisse au rythme de la parole plutot qu'a cadence fixe.
+    # `delays`: the moment of each word, measured on the generated voice, so the
+    # bubble fills at the pace of the speech rather than at a fixed rate.
     marks = [int(v) for v in (delays or [])][:400]
     _eval(
         f"window.avaMessage && avaMessage({_j(role)}, {_j(text)}, "
@@ -567,10 +569,10 @@ def clear_choices() -> None:
 
 
 def interrupted() -> None:
-    """Marque la derniere bulle comme coupee en cours de phrase.
+    """Mark the last bubble as cut off mid-sentence.
 
-    Sans ce signal, le texte reste affiche en entier alors qu'Ava s'est tue au
-    milieu : on lit une reponse complete qu'on n'a jamais entendue.
+    Without this, the text stays on screen in full while Ava stopped halfway
+    through — you end up reading a complete answer you never heard.
     """
     _eval("window.avaInterrupted && avaInterrupted()")
 

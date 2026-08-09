@@ -1,16 +1,16 @@
-"""le journal de bord d'ava : ou part le temps, et quand elle sort du mac.
+"""ava's log book: where the time goes, and when she leaves the mac.
 
-openjarvis pose l'energie, la latence et le cout en contraintes de premier
-ordre, au meme titre que la justesse. l'idee vaut ici : la seule question qu'on
-se pose vraiment avec un assistant vocal, c'est « pourquoi elle met trois
-secondes a repondre ». sans mesure, on optimise au pif.
+openjarvis treats energy, latency and cost as first-class constraints, right
+next to correctness. the idea holds here: the one question you actually ask of a
+voice assistant is "why did that take three seconds". without measurements you
+optimise by vibes.
 
-chaque interaction laisse une ligne dans `.cache/traces.jsonl` : quelle route a
-ete prise, combien de temps, et si ca a demande le reseau.
+every interaction leaves a line in `.cache/traces.jsonl`: which route was taken,
+how long it took, and whether it needed the network.
 
-⚠️ **on n'ecrit jamais ce qui a ete dit.** ni la commande, ni la reponse — juste
-la route, la duree et un drapeau reseau. un journal de tout ce qu'on dit a son
-assistante vocale n'a aucune raison de trainer en clair sur le disque.
+⚠️ **we never write down what was said.** not the command, not the answer — just
+the route, the duration and a network flag. a log of everything you say to your
+voice assistant has no business sitting in clear text on disk.
 """
 
 from __future__ import annotations
@@ -27,14 +27,13 @@ from ava import paths
 
 TRACE_PATH = paths.cache_dir("traces.jsonl")
 
-# au-dela, on repart d'un fichier neuf : une ligne fait ~90 octets, donc 20 000
-# lignes tiennent largement l'historique utile sans jamais peser.
+# past this we start a fresh file: a line is ~90 bytes, so 20 000 lines hold
+# plenty of useful history without ever weighing anything.
 MAX_LINES = 20000
 
-# la promesse de l'entete ne tient que si elle est **appliquee** : `record`
-# acceptait n'importe quelle chaine, donc un appelant distrait pouvait y glisser
-# la commande de l'utilisateur. seuls ces champs passent, les autres sont
-# silencieusement jetes.
+# the promise up top only holds if it is **enforced**: `record` used to accept
+# any string, so a distracted caller could slip the user's command in there.
+# only these fields get through, the rest are dropped quietly.
 ALLOWED_FIELDS = frozenset({"route", "network", "engine", "ok", "count", "cached"})
 
 _lock = threading.Lock()
@@ -51,7 +50,7 @@ def set_enabled(value: bool) -> None:
 
 
 def record(event: str, seconds: float = 0.0, **fields) -> None:
-    """Ajoute une ligne. Ne leve jamais : une mesure ratee n'est pas un incident."""
+    """Append a line. Never raises: a missed measurement is not an incident."""
     if not _enabled:
         return
     line = {
@@ -75,7 +74,7 @@ def record(event: str, seconds: float = 0.0, **fields) -> None:
 
 @contextmanager
 def span(event: str, **fields):
-    """Mesure un bloc. Les champs peuvent etre completes pendant l'execution.
+    """Time a block. Fields can still be filled in while it runs.
 
         with traces.span("commande") as trace:
             ...
@@ -106,7 +105,7 @@ def _read(limit: int = MAX_LINES) -> list[dict]:
 
 
 def prune() -> None:
-    """Coupe le journal quand il depasse la taille retenue."""
+    """Trim the log once it grows past the size we keep."""
     entries = _read()
     if len(entries) < MAX_LINES:
         return
@@ -138,7 +137,7 @@ def _percentile(values: list[int], share: float) -> int:
 
 
 def summary(event: str = "commande", entries: list[dict] | None = None) -> list[Stat]:
-    """Repartition par route : combien, quelle latence, combien de reseau."""
+    """Breakdown per route: how many, how slow, how much network."""
     rows = [entry for entry in (_read() if entries is None else entries)
             if entry.get("event") == event]
     routes: dict[str, list[dict]] = {}
@@ -160,7 +159,7 @@ def summary(event: str = "commande", entries: list[dict] | None = None) -> list[
 
 
 def report(event: str = "commande") -> str:
-    """Le tableau lisible, pour `doctor.py` et la ligne de commande."""
+    """The readable table, for `ava-doctor` and the command line."""
     stats = summary(event)
     if not stats:
         return "Aucune trace pour le moment."

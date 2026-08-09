@@ -1,4 +1,4 @@
-"""Capture d'écran à la demande et diagnostic local via un modèle Ollama vision."""
+"""On-demand screenshot, read locally by an ollama vision model."""
 
 from __future__ import annotations
 
@@ -131,7 +131,7 @@ class ScreenVision:
             reply = self._analyze_ollama(path, question)
             return reply if reply.available else self._ocr_fallback(path)
         except (OSError, RuntimeError, requests.RequestException):
-            # Ollama se lance souvent une fraction de seconde après l'app.
+            # ollama often finishes launching a fraction of a second after we do.
             if shutil.which("ollama"):
                 try:
                     subprocess.run(["open", "-a", "Ollama"], check=False, timeout=8)

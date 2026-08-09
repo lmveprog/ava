@@ -1,4 +1,4 @@
-"""machine d'etats thread-safe pour le cycle de vie d'ava."""
+"""a thread-safe state machine for ava's lifecycle."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ _ALLOWED = {
 
 
 class AssistantStateMachine:
-    """source de verite unique pour l'etat visible et fonctionnel d'ava."""
+    """The single source of truth for what ava is doing, and what she shows."""
 
     def __init__(
         self,
@@ -102,7 +102,7 @@ class AssistantStateMachine:
         with self._lock:
             current = self._snapshot.state
             if target != current and not force and target not in _ALLOWED[current]:
-                raise InvalidTransition(f"transition interdite : {current} -> {target}")
+                raise InvalidTransition(f"transition not allowed: {current} -> {target}")
             snapshot = StateSnapshot(
                 target,
                 label,

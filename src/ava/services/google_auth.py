@@ -1,13 +1,12 @@
-"""connexion google d'ava : oauth 2.0 « application de bureau » avec pkce.
+"""ava's google connection: oauth 2.0 "desktop app" flow with pkce.
 
-le principe est celui des connecteurs claude : un bouton dans les reglages
-ouvre le consentement google dans le navigateur, google renvoie le code sur un
-petit serveur local (127.0.0.1, port ephemere), et ava garde un refresh token
-sur le disque. aucune dependance google : requests + la stdlib suffisent.
+a button in the settings opens the google consent screen in the browser, google
+comes back to a small local server (127.0.0.1, ephemeral port), and ava keeps a
+refresh token on disk. no google sdk — requests and the stdlib are enough.
 
-pourquoi pas de secret embarque : un client « desktop » n'a pas de secret
-vraiment secret (google le dit lui-meme), et matheus doit de toute facon creer
-son propre client oauth pour que son agenda ne transite par personne d'autre.
+why no secret is shipped with the app: a desktop client has no secret that is
+genuinely secret (google says so itself), and you have to create your own oauth
+client anyway so that your calendar never passes through anybody else's.
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
-# lecture ET ecriture de l'agenda, plus l'adresse du compte pour l'afficher.
+# read AND write on the calendar, plus the account address to show it.
 SCOPES = (
     "https://www.googleapis.com/auth/calendar",
     "openid",
@@ -75,7 +74,7 @@ def _free_port() -> int:
 
 
 class _CallbackHandler(http.server.BaseHTTPRequestHandler):
-    """Recoit le retour de google et le range dans le serveur."""
+    """Takes google's callback and parks it on the server object."""
 
     def do_GET(self):  # noqa: N802 - impose par BaseHTTPRequestHandler
         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -91,22 +90,22 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, *_args):  # silence : ce serveur vit 30 secondes
+    def log_message(self, *_args):  # quiet: this server lives for 30 seconds
         return
 
 
 class GoogleAuth:
-    """Etat de la connexion google, cote disque."""
+    """The state of the google connection, as it sits on disk."""
 
     def __init__(self, token_path: Path | None = None) -> None:
         self.token_path = Path(token_path or TOKEN_PATH)
         self._lock = threading.RLock()
         self._pending: dict = {}
 
-    # --- identifiants du client oauth --------------------------------------
+    # --- oauth client credentials -------------------------------------------
 
     def credentials(self) -> tuple[str, str]:
-        """client id/secret, depuis config.json puis .env en repli."""
+        """client id/secret, from config.json, falling back to .env."""
         client_id = client_secret = ""
         try:
             from ava.config import STORE
@@ -119,7 +118,7 @@ class GoogleAuth:
         client_secret = client_secret or os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
         return client_id, client_secret
 
-    # --- stockage du jeton --------------------------------------------------
+    # --- token storage ------------------------------------------------------
 
     def _read(self) -> dict:
         try:
@@ -152,7 +151,7 @@ class GoogleAuth:
                 try:
                     requests.post(REVOKE_URL, data={"token": token}, timeout=10)
                 except requests.RequestException:
-                    pass  # revoquer est un bonus, oublier localement suffit
+                    pass  # revoking is a bonus; forgetting it locally is enough
             try:
                 self.token_path.unlink()
             except OSError:
@@ -160,11 +159,11 @@ class GoogleAuth:
             self._pending = {}
         return {"connected": False}
 
-    # --- le flux oauth ------------------------------------------------------
+    # --- the oauth flow -----------------------------------------------------
 
     def begin_connect(self) -> dict:
-        """Ouvre le consentement google. Rend la main tout de suite : la suite
-        se joue dans un thread, les reglages n'ont qu'a repasser sur status()."""
+        """Open the google consent screen. Returns immediately: the rest happens
+        on a thread, and the settings panel just polls status()."""
         client_id, client_secret = self.credentials()
         if not client_id or not client_secret:
             return {"started": False,
@@ -187,7 +186,7 @@ class GoogleAuth:
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
                 "state": state,
-                # sans ces deux-la, google ne redonne pas de refresh token.
+                # without these two, google won't hand back a refresh token.
                 "access_type": "offline",
                 "prompt": "consent",
             })
@@ -222,7 +221,7 @@ class GoogleAuth:
             self._pending["error"] = f"Google a refusé : {result['error'] or 'aucun code'}."
             return
         if not secrets.compare_digest(result["state"], state):
-            # protection csrf : un state qui ne colle pas = requete etrangere.
+            # csrf guard: a state that doesn't match means somebody else's request.
             self._pending["error"] = "Réponse Google inattendue (state invalide)."
             return
         try:
@@ -267,10 +266,10 @@ class GoogleAuth:
             pass
         return ""
 
-    # --- jeton d'acces utilisable ------------------------------------------
+    # --- a usable access token ----------------------------------------------
 
     def access_token(self) -> str:
-        """Un access token frais, rafraichi a la volee. Vide si non connecte."""
+        """A fresh access token, refreshed on the fly. Empty if not connected."""
         with self._lock:
             data = self._read()
             if not data.get("refresh_token"):
@@ -287,7 +286,7 @@ class GoogleAuth:
                 "grant_type": "refresh_token",
             })
             if response.status_code != 200:
-                # refresh revoque cote google : on oublie, l'ui redemandera.
+                # refresh revoked on google's side: forget it, the ui will re-ask.
                 if response.status_code in (400, 401):
                     try:
                         self.token_path.unlink()

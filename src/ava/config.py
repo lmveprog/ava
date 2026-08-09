@@ -1,4 +1,4 @@
-"""configuration locale, validee et sauvegardee atomiquement pour ava."""
+"""ava's local settings: validated on the way in, saved atomically."""
 
 from __future__ import annotations
 
@@ -13,28 +13,28 @@ import urllib.parse
 from ava import paths
 
 
-# les voix francaises du tts mistral : « marie » est la seule fr_FR du
-# catalogue, declinee en six humeurs. tout le reste est anglophone, donc
-# inutilisable ici — d'ou la liste en dur plutot qu'un appel reseau au demarrage.
+# the french voices in mistral's tts: "marie" is the only fr_FR one in the
+# catalogue, in six moods. everything else is english and therefore useless
+# here — hence the hardcoded list rather than a network call at startup.
 MISTRAL_VOICES = {
     "fr_marie_neutral", "fr_marie_happy", "fr_marie_curious",
     "fr_marie_excited", "fr_marie_sad", "fr_marie_angry",
 }
 
-# les voix francaises de kokoro (apache 2.0). `ff_siwis` est la seule voix fr_FR
-# du catalogue, entrainee sur du francais natif — les autres sont anglophones.
+# kokoro's french voices (apache 2.0). `ff_siwis` is the only fr_FR one, trained
+# on native french — the rest are english speakers.
 KOKORO_VOICES = {"ff_siwis"}
 
-# le moteur reste **local** : ni cle, ni quota, ni latence reseau. entre les deux
-# voix locales, kokoro est vingt fois plus rapide mais c'est chatterbox qui a ete
-# retenu — a l'oreille. une assistante qu'on entend toute la journee se juge au
-# timbre avant la milliseconde, et sa lenteur ne se voit presque pas : les accuses
-# de reception et le briefing sont fabriques d'avance.
+# the engine stays **local**: no key, no quota, no network latency. of the two
+# local voices kokoro is twenty times faster, but chatterbox won — by ear. an
+# assistant you hear all day is judged on timbre before milliseconds, and the
+# slowness barely shows: the acknowledgements and the briefing are made ahead
+# of time.
 DEFAULT_VOICE_ENGINE = "chatterbox"
 
-# les quatre quadrants, plus une place a part : `small` pose une petite fenetre
-# en bas a droite. Spotify n'a aucune raison d'occuper un quart de l'ecran —
-# on veut voir ce qui joue, pas le lire.
+# the four quadrants, plus one place of its own: `small` puts a little window
+# bottom right. spotify has no business taking a quarter of the screen — you
+# want to see what's playing, not read it.
 APP_POSITIONS = frozenset({"tl", "tr", "bl", "br", "small"})
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -44,8 +44,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "engine": DEFAULT_VOICE_ENGINE,
         "kokoro_voice": "ff_siwis",
         "mistral_voice": "fr_marie_neutral",
-        # la voix change de couleur selon ce qu'ava raconte (briefing enjoue,
-        # question curieuse...). desactivable pour garder un timbre unique.
+        # the voice shifts colour with what she's saying (a cheerful briefing,
+        # a curious question…). turn it off to keep a single timbre.
         "expressive": True,
         "reference": "",
         "exaggeration": 0.5,
@@ -55,8 +55,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "model_id": "eleven_multilingual_v2",
         "system_fallback": "Thomas",
     },
-    # connecteur google (agenda) : le client oauth appartient a l'utilisateur,
-    # les jetons vivent a part dans .cache/google_token.json.
+    # google connector (calendar): the oauth client belongs to the user, and the
+    # tokens live apart in .cache/google_token.json.
     "google": {"client_id": "", "client_secret": ""},
     "wake": {
         "phrases": ["bonjour ava", "ok ava"],
@@ -80,8 +80,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_continuous_turns": 12,
     },
     "computer_use": {"enabled": True, "confirmation_ttl_seconds": 30},
-    # les competences peuvent lancer des scripts : on veut pouvoir les couper
-    # d'un reglage, sans deplacer de dossier.
+    # skills can run scripts, so we want one setting that turns them all off
+    # without having to move a folder.
     "skills": {"enabled": True},
     "ui": {
         "start_hidden": False,
@@ -99,12 +99,12 @@ class ConfigError(ValueError):
 
 
 def clap_min_rms(sensitivity: int) -> float:
-    """Niveau minimum pour qu'un pic ait le droit d'etre un clap.
+    """The floor a peak has to clear before it's allowed to be a clap.
 
-    Mesures du 08/08 : les vraies mains font 0,69 / 0,98 / 2,08 ; la frappe au
-    clavier plafonne vers 0,28-0,44. L'ancienne courbe donnait 0,28 au milieu du
-    curseur, donc taper deux touches a 200 ms d'intervalle reveillait Ava. On
-    remonte le plancher au-dessus du clavier tout en gardant de la marge.
+    Measured on 8 August: real hands come in at 0.69 / 0.98 / 2.08, while typing
+    tops out around 0.28-0.44. The old curve put 0.28 in the middle of the
+    slider, so two keys 200 ms apart woke Ava up. This lifts the floor above the
+    keyboard while keeping some headroom.
     """
     value = max(0, min(100, int(sensitivity)))
     return round(0.90 - 0.007 * value, 3)
@@ -128,15 +128,15 @@ def _decimal(value: Any, fallback: float, minimum: float, maximum: float) -> flo
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return fallback
     number = float(value)
-    # nan et inf traversaient les bornes sans bruit : min(1.2, nan) rend 1.2,
-    # donc un nan se transformait en maximum au lieu d'etre refuse.
+    # nan and inf slipped through the bounds silently: min(1.2, nan) gives 1.2,
+    # so a nan turned into the maximum instead of being refused.
     if number != number or number in (float("inf"), float("-inf")):
         return fallback
     return round(max(minimum, min(maximum, number)), 3)
 
 
 def _http_url(value: Any, fallback: str) -> str:
-    """Une url de moteur local, et rien d'autre : ni javascript:, ni file:."""
+    """A local engine url and nothing else — no javascript:, no file:."""
     candidate = _string(value, "", 300)
     if not candidate:
         return fallback
@@ -151,7 +151,7 @@ def _choice(value: Any, fallback: str, allowed: set[str]) -> str:
 
 def normalize_config(candidate: Any) -> dict[str, Any]:
     if not isinstance(candidate, dict):
-        raise ConfigError("la configuration doit etre un objet json")
+        raise ConfigError("the configuration must be a json object")
     base = DEFAULT_CONFIG
     identity = candidate.get("identity", {})
     voice = candidate.get("voice", {})
@@ -166,7 +166,7 @@ def normalize_config(candidate: Any) -> dict[str, Any]:
     for section in (identity, voice, wake, clap, morning, conversation, computer,
                     skills_section, google, ui):
         if not isinstance(section, dict):
-            raise ConfigError("une section de configuration est invalide")
+            raise ConfigError("one of the configuration sections is invalid")
 
     phrases = wake.get("phrases", base["wake"]["phrases"])
     if not isinstance(phrases, list):
@@ -187,8 +187,8 @@ def normalize_config(candidate: Any) -> dict[str, Any]:
             position = item.get("position")
             if name and position in APP_POSITIONS and position not in used_positions:
                 entry = {"name": name, "position": position}
-                # une adresse ouvre l'app *sur* une page : « Dia » seul ouvre
-                # l'onglet d'accueil, ce qui ne montre rien.
+                # a url opens the app *on* a page: "Dia" on its own opens the
+                # home tab, which shows nothing.
                 url = _string(item.get("url"), "", 400)
                 if url.startswith(("http://", "https://")):
                     entry["url"] = url

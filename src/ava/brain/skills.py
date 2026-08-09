@@ -1,32 +1,28 @@
-"""les competences d'ava, au format **Agent Skills**.
+"""ava's skills, in the **Agent Skills** format.
 
-c'est le meme standard ouvert que celui d'openjarvis (agentskills.io, publie a
-l'origine par anthropic) : une competence est un **dossier** qui contient un
-`SKILL.md` — des metadonnees en frontmatter yaml, puis des instructions — et,
-facultativement, des scripts et des fichiers de reference.
+same open standard openjarvis uses (agentskills.io, originally published by
+anthropic): a skill is a **folder** holding a `SKILL.md` — yaml frontmatter,
+then instructions — and, optionally, scripts and reference files.
 
-    ma-competence/
-      SKILL.md          obligatoire : metadonnees + instructions
-      scripts/          facultatif : code executable
-      references/       facultatif : documentation
+    my-skill/
+      SKILL.md          required: metadata + instructions
+      scripts/          optional: executable code
+      references/       optional: documentation
 
-le standard prevoit une **divulgation progressive** en trois temps, et c'est ce
-qui rend la chose viable ici : ava peut connaitre trente competences sans
-alourdir quoi que ce soit.
+the standard's **progressive disclosure** in three steps is what makes this
+workable here: ava can know thirty skills without carrying any weight for it.
 
-1. **decouverte** — au demarrage on ne lit que `name` et `description`. juste de
-   quoi savoir quand une competence *pourrait* servir.
-2. **activation** — quand une demande correspond, on lit le `SKILL.md` en entier.
-3. **execution** — on suit les instructions, en lancant le script fourni s'il y
-   en a un.
+1. **discovery** — at startup we read `name` and `description` and nothing else.
+   just enough to know when a skill *might* be useful.
+2. **activation** — when a request matches, we read the whole `SKILL.md`.
+3. **execution** — we follow the instructions, running the script if there is one.
 
-interet pour ava : ajouter une capacite ne demande plus de toucher a `ava.py`.
-on depose un dossier, elle sait faire.
+what ava gets out of it: adding a capability no longer means touching `app.py`.
+drop a folder in, she knows how.
 
-⚠️ **une competence peut executer du code.** elles vivent donc dans des dossiers
-que l'utilisateur controle, jamais telechargees toutes seules, et l'execution
-est bornee (pas de shell, chemin verifie, delai maximum). c'est le meme niveau
-de confiance qu'un script qu'on lance soi-meme depuis son terminal.
+⚠️ **a skill can run code.** so they live in folders the user controls, are never
+downloaded on their own, and execution is fenced in — no shell, path checked,
+hard timeout. same level of trust as a script you run yourself from a terminal.
 """
 
 from __future__ import annotations
@@ -40,9 +36,8 @@ import subprocess
 from ava import paths
 
 
-# les competences livrees avec ava, puis celles de l'utilisateur. le dossier
-# personnel gagne en cas de meme nom : on peut donc remplacer une competition
-# fournie sans modifier le depot.
+# the skills shipped with ava first, then the user's. the personal folder wins
+# on a name clash, so a bundled skill can be replaced without touching the repo.
 BUILTIN_DIR = paths.BUILTIN_SKILLS_DIR
 USER_DIR = paths.USER_SKILLS_DIR
 
@@ -64,7 +59,7 @@ class Skill:
         return self.path / "SKILL.md"
 
     def instructions(self) -> str:
-        """Le corps du SKILL.md — l'etape « activation », lue seulement au besoin."""
+        """The body of SKILL.md — the activation step, read only when needed."""
         try:
             raw = self.skill_file.read_text(encoding="utf-8")
         except OSError:
@@ -72,12 +67,12 @@ class Skill:
         return _split_frontmatter(raw)[1][:MAX_INSTRUCTIONS_CHARS]
 
     def script(self) -> Path | None:
-        """Le script a lancer, s'il existe et s'il est bien dans la competence."""
+        """The script to run, if it exists and really lives inside the skill."""
         if not self.command:
             return None
         candidate = (self.path / self.command).resolve()
-        # une competence n'a aucune raison de pointer hors de son propre dossier.
-        # sans cette verification, un `command: ../../../bin/rm` sortirait du bac.
+        # a skill has no business pointing outside its own folder. without this
+        # check, a `command: ../../../bin/rm` would walk straight out of the box.
         try:
             candidate.relative_to(self.path.resolve())
         except ValueError:
@@ -87,7 +82,7 @@ class Skill:
 
 
 def _split_frontmatter(raw: str) -> tuple[dict, str]:
-    """Separe le frontmatter yaml du corps du document."""
+    """Split the yaml frontmatter from the body of the document."""
     text = raw.lstrip("﻿")
     match = re.match(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", text, re.DOTALL)
     if not match:
@@ -96,7 +91,7 @@ def _split_frontmatter(raw: str) -> tuple[dict, str]:
     try:
         import yaml
         data = yaml.safe_load(header)
-    except Exception:  # noqa: BLE001 - un yaml casse ne doit pas tuer la decouverte
+    except Exception:  # noqa: BLE001 - broken yaml must not kill discovery
         return {}, body
     return (data if isinstance(data, dict) else {}), body
 
@@ -112,8 +107,8 @@ def _read_skill(folder: Path) -> Skill | None:
     meta, _body = _split_frontmatter(raw)
     name = str(meta.get("name", "") or folder.name).strip()[:80]
     description = str(meta.get("description", "") or "").strip()[:600]
-    # le standard exige name + description : sans description, ava n'a aucun
-    # moyen de savoir quand s'en servir, donc la competence serait morte.
+    # the standard requires name + description: without a description ava has no
+    # way of knowing when to reach for it, so the skill would be dead weight.
     if not name or not description:
         print(f"[skills] « {folder.name} » sans nom ou sans description, ignorée")
         return None
@@ -123,7 +118,7 @@ def _read_skill(folder: Path) -> Skill | None:
 
 
 def discover(directories=None) -> list[Skill]:
-    """Etape 1 : nom et description seulement, pour tenir en memoire sans cout."""
+    """Step 1: name and description only — cheap enough to hold in memory."""
     found: dict[str, Skill] = {}
     for directory in (directories if directories is not None else (BUILTIN_DIR, USER_DIR)):
         directory = Path(directory)
@@ -134,12 +129,12 @@ def discover(directories=None) -> list[Skill]:
                 continue
             skill = _read_skill(folder)
             if skill is not None:
-                found[skill.name] = skill      # le dossier utilisateur passe apres
+                found[skill.name] = skill      # the user folder is walked last, so it wins
     return list(found.values())
 
 
 def catalogue(skills: list[Skill]) -> str:
-    """La liste que voit le routeur d'intentions : un nom, une description."""
+    """What the intent router gets to see: a name and a description."""
     return "\n".join(f"- {skill.name} : {skill.description}" for skill in skills)
 
 
@@ -152,19 +147,18 @@ def find(name: str, skills: list[Skill] | None = None) -> Skill | None:
 
 
 def run_script(skill: Skill, argument: str = "") -> tuple[bool, str]:
-    """Etape 3 : lance le script de la competence. Rend (reussite, sortie).
+    """Step 3: run the skill's script. Returns (succeeded, output).
 
-    Pas de shell, la demande passe en argument (jamais concatenee dans une ligne
-    de commande), et un delai maximum : une competence qui part en boucle ne doit
-    pas figer ava.
+    No shell, the request goes in as an argument (never concatenated into a
+    command line), and a hard timeout: a skill that spins must not freeze ava.
     """
     script = skill.script()
     if script is None:
         return False, ""
     command = [str(script)]
     if not os.access(script, os.X_OK):
-        # script non marque executable : on le lance avec son interprete plutot
-        # que d'echouer sur un « permission denied » incomprehensible.
+        # script not marked executable: run it through its interpreter rather
+        # than failing with a baffling "permission denied".
         interpreter = "python3" if script.suffix == ".py" else "/bin/sh"
         command = [interpreter, str(script)]
     if argument:

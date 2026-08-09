@@ -1,4 +1,4 @@
-"""Index Spotlight des applications macOS, avec résolution vocale prudente."""
+"""a spotlight index of installed apps, matched carefully against speech."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ class AppCatalog:
             apps: dict[str, tuple[str, str]] = {}
             for raw_path in paths:
                 path = Path(raw_path)
-                # Un bundle imbriqué dans un autre bundle est un composant, pas une app utilisateur.
+                # a bundle nested inside another bundle is a component, not an app.
                 if any(parent.suffix == ".app" for parent in path.parents):
                     continue
                 name = path.stem.strip()
@@ -92,7 +92,7 @@ class AppCatalog:
         partial.sort(key=lambda item: item[0], reverse=True)
         best_score, best = partial[0]
         second_score = partial[1][0] if len(partial) > 1 else 0.0
-        # Un nom mal entendu ne doit jamais ouvrir arbitrairement une autre app.
+        # a misheard name must never end up opening some other app instead.
         if best_score < 0.73 or best_score - second_score < 0.06:
             return None
         return best
