@@ -65,7 +65,7 @@ def parse_computer_intent(text: str) -> ComputerIntent | None:
         "capture d ecran", "capture ecran", "screenshot", "photo de l ecran",
     )):
         return ComputerIntent(
-            "screenshot", summary="Je prends une capture de l'ecran.",
+            "screenshot", summary="Je prends une capture de l'écran.",
         )
 
     type_match = re.match(
@@ -193,7 +193,7 @@ class MacComputerController:
             detail = method(intent)
             return ActionOutcome(True, True, detail or intent.summary, intent=intent)
         except subprocess.TimeoutExpired:
-            return ActionOutcome(True, False, "L'action a pris trop de temps et a ete arretee.", intent=intent)
+            return ActionOutcome(True, False, "L'action a pris trop de temps et a été arrêtée.", intent=intent)
         except Exception as exc:  # noqa: BLE001
             return ActionOutcome(True, False, f"Je n'ai pas pu terminer l'action : {exc}", intent=intent)
 
@@ -292,7 +292,7 @@ end run'''
         path = self.screenshot_dir / f"ava_{stamp}.png"
         result = self._run(["screencapture", "-x", str(path)])
         self._require_ok(result, "capture impossible")
-        return f"Capture enregistree dans {path}."
+        return f"Capture enregistrée dans {path}."
 
 
 class ComputerUseEngine:

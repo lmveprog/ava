@@ -12,6 +12,7 @@ from typing import Callable
 
 class AvaState(str, Enum):
     DORMANT = "dormant"
+    IDLE = "idle"
     LISTENING = "listening"
     THINKING = "thinking"
     ACTING = "action"
@@ -34,25 +35,33 @@ class InvalidTransition(RuntimeError):
 
 _ALLOWED = {
     AvaState.DORMANT: {
-        AvaState.LISTENING, AvaState.SPEAKING, AvaState.BOOTING, AvaState.ERROR,
+        AvaState.IDLE, AvaState.LISTENING, AvaState.SPEAKING,
+        AvaState.BOOTING, AvaState.ERROR,
+    },
+    AvaState.IDLE: {
+        AvaState.DORMANT, AvaState.LISTENING, AvaState.THINKING,
+        AvaState.SPEAKING, AvaState.BOOTING, AvaState.ERROR,
     },
     AvaState.LISTENING: {
-        AvaState.THINKING, AvaState.SPEAKING, AvaState.DORMANT, AvaState.ERROR,
+        AvaState.IDLE, AvaState.THINKING, AvaState.SPEAKING,
+        AvaState.DORMANT, AvaState.ERROR,
     },
     AvaState.THINKING: {
         AvaState.ACTING, AvaState.SPEAKING, AvaState.LISTENING,
-        AvaState.DORMANT, AvaState.ERROR,
+        AvaState.IDLE, AvaState.DORMANT, AvaState.ERROR,
     },
     AvaState.ACTING: {
-        AvaState.SPEAKING, AvaState.LISTENING, AvaState.DORMANT, AvaState.ERROR,
+        AvaState.IDLE, AvaState.SPEAKING, AvaState.LISTENING,
+        AvaState.DORMANT, AvaState.ERROR,
     },
     AvaState.SPEAKING: {
-        AvaState.LISTENING, AvaState.THINKING, AvaState.DORMANT, AvaState.ERROR,
+        AvaState.IDLE, AvaState.LISTENING, AvaState.THINKING,
+        AvaState.DORMANT, AvaState.ERROR,
     },
     AvaState.BOOTING: {
-        AvaState.SPEAKING, AvaState.DORMANT, AvaState.ERROR,
+        AvaState.IDLE, AvaState.SPEAKING, AvaState.DORMANT, AvaState.ERROR,
     },
-    AvaState.ERROR: {AvaState.DORMANT, AvaState.LISTENING},
+    AvaState.ERROR: {AvaState.IDLE, AvaState.DORMANT, AvaState.LISTENING},
 }
 
 
@@ -109,3 +118,6 @@ class AssistantStateMachine:
 
     def dormant(self) -> StateSnapshot:
         return self.transition(AvaState.DORMANT, "", force=True)
+
+    def idle(self, label: str = "Prete") -> StateSnapshot:
+        return self.transition(AvaState.IDLE, label, force=True)

@@ -31,3 +31,24 @@ class WakeWordTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FalseWakeTests(unittest.TestCase):
+    """Ava se reveillait toute seule : vosk-small fabrique « ava » sur du bruit."""
+
+    def test_the_bare_name_never_wakes_on_a_partial(self):
+        gate = PartialWakeGate(hold_seconds=0.0)
+        self.assertFalse(gate.feed("ava", now=1.0).detected)
+        self.assertFalse(gate.feed("ava", now=2.0).detected)
+
+    def test_the_bare_name_still_wakes_on_a_final_result(self):
+        self.assertTrue(extract_wake("ava").detected)
+
+    def test_a_real_greeting_still_passes_on_a_partial(self):
+        gate = PartialWakeGate(hold_seconds=0.0)
+        gate.feed("bonjour ava", now=1.0)
+        self.assertTrue(gate.feed("bonjour ava", now=1.5).detected)
+
+    def test_standalone_can_be_refused_explicitly(self):
+        self.assertFalse(extract_wake("ava", allow_standalone=False).detected)
+        self.assertTrue(extract_wake("ok ava", allow_standalone=False).detected)

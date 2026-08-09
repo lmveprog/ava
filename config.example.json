@@ -1,13 +1,26 @@
 {
   "schema_version": 1,
   "identity": {"name": "Ava", "city": "Paris"},
-  "voice": {"voice_id": "", "model_id": "eleven_multilingual_v2", "system_fallback": "Thomas"},
+  "voice": {
+    "engine": "mistral",
+    "mistral_voice": "fr_marie_neutral",
+    "expressive": true,
+    "reference": "",
+    "exaggeration": 0.5,
+    "cfg_weight": 0.35,
+    "temperature": 0.65,
+    "voice_id": "",
+    "model_id": "eleven_multilingual_v2",
+    "system_fallback": "Thomas"
+  },
+  "google": {"client_id": "", "client_secret": ""},
   "wake": {
     "phrases": ["bonjour ava", "ok ava"],
     "clap": {"enabled": true, "sensitivity": 50, "min_gap_ms": 120, "max_gap_ms": 350}
   },
   "morning": {
     "spotify_uri": "",
+    "open_apps_on_start": false,
     "apps": [
       {"name": "Terminal", "position": "tl"},
       {"name": "Safari", "position": "tr"},
@@ -15,7 +28,20 @@
       {"name": "Music", "position": "br"}
     ]
   },
-  "conversation": {"base_url": "http://127.0.0.1:1234/v1", "model": ""},
+  "conversation": {
+    "base_url": "http://127.0.0.1:1234/v1",
+    "model": "",
+    "continuous_listening": true,
+    "followup_timeout_seconds": 8,
+    "max_continuous_turns": 12
+  },
   "computer_use": {"enabled": true, "confirmation_ttl_seconds": 30},
-  "ui": {"start_hidden": true, "startup_hint_seconds": 5}
+  "ui": {
+    "start_hidden": false,
+    "start_expanded": true,
+    "show_illustrations": true,
+    "startup_animation": true,
+    "startup_duration_seconds": 9,
+    "startup_hint_seconds": 0
+  }
 }

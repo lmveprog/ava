@@ -1,7 +1,24 @@
+# macos
+.DS_Store
+
+# python
 .venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# local state — never leaves this machine
 .env
 .cache/
-__pycache__/
-*.pyc
-models/
 config.json
+
+# downloaded at install time (vosk, whisper, kokoro…), ~65 MB and up
+models/
+
+# voice reference clips are personal: bring your own, don't ship mine
+voices/
+
+# session notes, not part of the project
+MEMORY.md
