@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""diagnostic sans action destructive pour l'installation locale d'ava."""
+"""a read-only health check on a local ava install."""
 
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ import requests
 
 
 
-# sans ca, le diagnostic annoncait les cles absentes alors qu'ava, elle, les
-# lisait tres bien : c'est le genre de faux negatif qui envoie chercher une
-# panne la ou il n'y en a pas.
+# without this the check reported keys as missing while ava herself read them
+# perfectly well — the kind of false negative that sends you hunting for a fault
+# that isn't there.
 try:
     from dotenv import load_dotenv
     load_dotenv(paths.ENV_FILE)
@@ -152,7 +152,7 @@ def run_checks() -> list[Check]:
 
 
 def _voice_checks() -> list[Check]:
-    """La voix locale : trois dependances silencieuses, trois pieges connus."""
+    """The local voice: three quiet dependencies, three known traps."""
     checks: list[Check] = []
     voice = STORE.snapshot().get("voice", {})
     engine = voice.get("engine", "kokoro")
@@ -173,8 +173,8 @@ def _voice_checks() -> list[Check]:
     checks.append(Check("voix:chatterbox", "ok" if ok else "error",
                         "installe" if ok else "pip install git+https://github.com/resemble-ai/chatterbox.git"))
 
-    # perth importe pkg_resources : sans setuptools<81 le watermarker vaut None
-    # et le modele refuse de se construire, avec un message incomprehensible.
+    # perth imports pkg_resources: without setuptools<81 the watermarker comes
+    # back None and the model refuses to build, with a baffling message.
     try:
         import perth
         armed = getattr(perth, "PerthImplicitWatermarker", None) is not None
@@ -211,7 +211,7 @@ def _voice_checks() -> list[Check]:
 
 
 def _kokoro_checks(voice: dict) -> list[Check]:
-    """Le moteur local : trois briques, et rien qui sorte du mac."""
+    """The local engine: three pieces, and nothing leaving the mac."""
     checks: list[Check] = []
     for module, remede in (("mlx_audio", "pip install mlx-audio"),
                            ("misaki", "pip install misaki"),
@@ -219,8 +219,8 @@ def _kokoro_checks(voice: dict) -> list[Check]:
         present = importlib.util.find_spec(module) is not None
         checks.append(Check(f"voix:{module}", "ok" if present else "error",
                             "installe" if present else remede))
-    # ⚠️ le g2p francais passe par espeak : sans lui, kokoro se tait en francais
-    # alors qu'il parle tres bien anglais — panne muette et deroutante.
+    # ⚠️ the french g2p goes through espeak: without it kokoro goes silent in
+    # french while speaking english beautifully — a mute, disorienting failure.
     espeak = shutil.which("espeak-ng") or shutil.which("espeak") or ""
     checks.append(Check("voix:espeak", "ok" if espeak else "error",
                         espeak or "brew install espeak-ng (le français passe par lui)"))
@@ -230,11 +230,11 @@ def _kokoro_checks(voice: dict) -> list[Check]:
 
 
 def _mistral_voice_checks(voice: dict) -> list[Check]:
-    """La voix distante : une cle, un timbre, et ffmpeg pour recoller.
+    """The remote voice: a key, a timbre, and ffmpeg to join the pieces.
 
-    Le piege du jour : sans ffmpeg, une phrase courte marche (un seul morceau)
-    mais le briefing du matin ne sort pas — il faut recoller cinq phrases.
-    L'erreur n'apparait qu'au premier « bonjour ava », donc on la cherche ici.
+    The trap of the day: without ffmpeg a short sentence works (one piece) but
+    the morning briefing never comes out — that one needs five joined together.
+    The error only surfaces at the first "bonjour ava", so we look for it here.
     """
     checks: list[Check] = []
     key = os.getenv("MISTRAL_API_KEY", "").strip()
@@ -278,7 +278,7 @@ def _mistral_voice_checks(voice: dict) -> list[Check]:
 
 
 def _skills_checks() -> list[Check]:
-    """Les competences installees, au format Agent Skills."""
+    """The installed skills, in the Agent Skills format."""
     checks: list[Check] = []
     from ava.brain import skills as skills
     enabled = STORE.snapshot().get("skills", {}).get("enabled", True)
@@ -290,8 +290,8 @@ def _skills_checks() -> list[Check]:
     ))
     for skill in installed:
         script = skill.script()
-        # une competence qui annonce un script introuvable ne dira rien le jour
-        # ou on l'appelle : autant le savoir maintenant.
+        # a skill advertising a script that isn't there will say nothing on the
+        # day it's called, so we'd rather know now.
         broken = bool(skill.command) and script is None
         checks.append(Check(
             f"competence:{skill.name}", "error" if broken else "ok",
@@ -303,7 +303,7 @@ def _skills_checks() -> list[Check]:
 
 
 def _understanding_checks() -> list[Check]:
-    """Le routeur d'intentions : facultatif, mais on veut savoir s'il repond."""
+    """The intent router: optional, but we want to know whether it answers."""
     checks: list[Check] = []
     from ava.brain import understanding as understanding
     checks.append(Check("comprehension:modele", "ok", understanding.MODEL, required=False))
@@ -320,11 +320,11 @@ def _understanding_checks() -> list[Check]:
 
 
 def _network_checks() -> list[Check]:
-    """Ce que coute une coupure, et si les replis locaux sont la.
+    """What an outage costs, and whether the local fallbacks are there.
 
-    Quatre sous-systemes sortent du mac (voix, meteo, actu, agenda). Sans
-    coupe-circuit ils payaient chacun leur timeout complet, soit plusieurs
-    minutes de silence sur un simple wifi en rade — d'ou ce controle.
+    Four subsystems leave the mac (voice, weather, news, calendar). Without a
+    breaker they each paid their full timeout — minutes of silence over nothing
+    more than a dead wifi, which is why this check exists.
     """
     from ava import net as net
     state = net.status()
@@ -341,8 +341,8 @@ def _network_checks() -> list[Check]:
         f"fenetre hors-ligne {net.OFFLINE_WINDOW_S:.0f} s",
         required=False,
     ))
-    # sans repli, une coupure rend ava completement muette : c'est le seul
-    # maillon dont l'absence ne se voit qu'au pire moment.
+    # with no fallback an outage leaves ava completely mute: it's the one link
+    # whose absence only shows at the worst possible moment.
     local_voice = importlib.util.find_spec("chatterbox") is not None
     checks.append(Check(
         "reseau:voix-de-repli", "ok" if local_voice else "warning",
@@ -354,7 +354,7 @@ def _network_checks() -> list[Check]:
 
 
 def _google_checks() -> list[Check]:
-    """Le connecteur agenda echoue en silence quand un maillon manque."""
+    """The calendar connector fails quietly when a link is missing."""
     try:
         from ava.services.google_auth import AUTH
         status = AUTH.status()
@@ -369,9 +369,9 @@ def _google_checks() -> list[Check]:
                       "identifiants presents, compte non connecte", required=False)]
 
     checks = [Check("google:compte", "ok", status.get("email", "connecte"), required=False)]
-    # le piege maison : google delivre un jeton mais retire le scope calendar
-    # quand l'api est desactivee ou le scope non enregistre. sans ce controle,
-    # ava semble connectee et repond "je n'arrive pas a lire ton agenda".
+    # the house special: google hands over a token but drops the calendar scope
+    # when the api is disabled or the scope unregistered. without this check ava
+    # looks connected and answers "je n'arrive pas a lire ton agenda".
     try:
         import json as _json
         from ava.services.google_auth import TOKEN_PATH
@@ -390,7 +390,7 @@ def _google_checks() -> list[Check]:
 
 
 def _promethee_checks() -> list[Check]:
-    """Le reveil pilote Promethee par l'accessibilite : deux pre-requis."""
+    """The wake-up drives Promethee through accessibility: two prerequisites."""
     checks: list[Check] = []
     installed = Path("/Applications/Promethee.app").exists()
     checks.append(Check("promethee:app", "ok" if installed else "warning",
@@ -408,10 +408,10 @@ def _promethee_checks() -> list[Check]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="verifie l'installation locale d'ava")
-    parser.add_argument("--json", action="store_true", help="sortie json")
+    parser = argparse.ArgumentParser(description="check a local ava install")
+    parser.add_argument("--json", action="store_true", help="json output")
     parser.add_argument("--traces", action="store_true",
-                        help="ou part le temps, d'apres le journal de bord")
+                        help="where the time goes, according to the log book")
     args = parser.parse_args()
     checks = run_checks()
     if args.json:

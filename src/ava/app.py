@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-# ava - assistante vocale mac : "bonjour ava" / double clap -> reveil du bureau,
-# "ok ava" -> commandes vocales.
-# on ecoute le micro, on detecte un double clap, et on lance :
-#   1. la musique sur spotify
-#   2. la voix de bienvenue (elevenlabs, mise en cache pour partir instantanement)
-#   3. les apps rangees en 4 quadrants a l'ecran
+# ava - a voice assistant for the mac: "bonjour ava" or a double clap wakes the
+# desk up, "ok ava" runs a command.
+# we listen to the mic, spot a double clap, and set off:
+#   1. the music on spotify
+#   2. the welcome line (cached so it starts instantly)
+#   3. the apps laid out in four quadrants
 #
-# lancer :  .venv/bin/python jarvis.py
-# stopper : ctrl+c
+# start:  .venv/bin/ava
+# stop:   ctrl+c
 
 from __future__ import annotations
 
@@ -56,49 +56,49 @@ from ava.services.web_research import ResearchReply, WebResearch
 load_dotenv(paths.ENV_FILE)
 SETTINGS = CONFIG.snapshot()
 
-# --- reglages ---------------------------------------------------------------
+# --- settings ---------------------------------------------------------------
 
-# micro : les macbook echantillonnent a 48000 hz, pas 44100.
-# un mauvais sample rate = cause numero 1 des claps non detectes.
+# mic: macbooks sample at 48000 hz, not 44100.
+# the wrong sample rate is the number one cause of missed claps.
 SAMPLE_RATE = 48000
 BLOCK_MS = 10                      # taille d'un bloc d'analyse (ms)
 
-# detection du clap par la FORME du son, pas par le volume seul.
-# une voix atteint le meme niveau qu'un clap (clap 0.42-0.66, voix ~0.54) :
-# on ne peut pas les separer au volume. mais un clap s'effondre en <100 ms,
-# une voix reste forte. donc quand un pic depasse le seuil on attend, et on
-# verifie que le niveau est bien retombe.
+# clap detection by the SHAPE of the sound, not by volume alone.
+# a voice reaches the same level as a clap (clap 0.42-0.66, voice ~0.54), so you
+# can't tell them apart on volume. but a clap collapses in under 100 ms while a
+# voice stays loud. so when a peak crosses the threshold we wait, then check the
+# level really did fall back.
 MIN_RMS = CONFIG.clap_min_rms()    # derive du curseur de sensibilite (0..100)
 DECAY_MS = 100                     # delai max pour que le son "s'effondre"
 DECAY_RATIO = 0.35                 # doit retomber sous 35% du pic => c'est un clap
 MAX_EVENT_MS = 300                 # si ca reste fort plus longtemps => voix/musique
 
-# double clap : ecart entre les deux claps
+# double clap: the gap between the two claps
 MIN_GAP_S = SETTINGS["wake"]["clap"]["min_gap_ms"] / 1000
 MAX_GAP_S = SETTINGS["wake"]["clap"]["max_gap_ms"] / 1000
 CLAP_ENABLED = SETTINGS["wake"]["clap"]["enabled"]
 REFRACTORY_S = 0.10                # petit temps mort apres un clap (echo)
-# afplay met un instant a sortir le premier echantillon : on decale le
-# transcript d'autant, sinon le texte parle avant la voix.
+# afplay takes a moment to put out its first sample: we shift the transcript by
+# the same amount, or the text speaks before the voice does.
 AFPLAY_LEAD_S = 0.22
 CLAP_PEAK_RATIO = 2.5              # les deux coups d'une paire doivent se ressembler
 FLOW_COOLDOWN_S = 8.0              # apres un declenchement complet, on se tait
 
-# mode debug : affiche le niveau mesure et le seuil a chaque pic
+# debug mode: print the measured level and the threshold on every peak
 DEBUG = os.getenv("AVA_DEBUG", os.getenv("JARVIS_DEBUG", "")).strip().lower() in (
     "1", "true", "yes", "on")
 
-# musique spotify : une URI force un album/une playlist ; vide = lecture
-# aleatoire dans le dernier contexte utilise (playlist, titres aimes, etc.).
+# spotify: a URI forces an album or playlist; empty means shuffle inside the last
+# context used (playlist, liked songs, whatever).
 SPOTIFY_URI = SETTINGS["morning"]["spotify_uri"]
 
-# apps a ouvrir + leur quadrant : "tl" haut-gauche, "tr" haut-droite,
-# "bl" bas-gauche, "br" bas-droite.
+# apps to open and their quadrant: "tl" top-left, "tr" top-right,
+# "bl" bottom-left, "br" bottom-right.
 APPS = [(item["name"], item["position"], item.get("url", ""))
         for item in SETTINGS["morning"]["apps"]]
 
-# le briefing du matin est construit a la volee (meteo + actu ia + citation),
-# donc le texte change chaque jour. la ville pour la meteo :
+# the morning briefing is built on the fly (weather + ai news + a quote), so the
+# text changes every day. the city for the weather:
 CITY = SETTINGS["identity"]["city"]
 USER_NAME = SETTINGS["identity"]["name"]
 WAKE_PHRASES = tuple(SETTINGS["wake"]["phrases"])
@@ -109,22 +109,22 @@ CONTINUOUS_LISTENING = SETTINGS["conversation"]["continuous_listening"]
 FOLLOWUP_TIMEOUT_S = SETTINGS["conversation"]["followup_timeout_seconds"]
 MAX_CONTINUOUS_TURNS = SETTINGS["conversation"]["max_continuous_turns"]
 
-# le fonds de citations vit dans `quotes.py` : elles sont attribuees, et la
-# rotation evite ce qui vient d'etre dit.
-# accents obligatoires : c'est lu par une synthese vocale, et "espere" ne se
-# prononce pas du tout comme "espère".
+# the quote collection lives in `services/quotes.py`: they're attributed, and the
+# rotation avoids whatever was just said.
+# accents are mandatory: this is read by a speech synthesiser, and "espere" is
+# not pronounced anything like "espère".
 
 def daily_quote() -> str:
-    """La citation dite dans le briefing, auteur compris."""
+    """The quote said in the briefing, author included."""
     return quotes.of_the_day().spoken()
 
 
 def startup_quote() -> str:
-    """La citation affichee sur la scene de demarrage."""
+    """The quote shown on the startup scene."""
     return quotes.of_the_day().spoken()
 
 
-# --- meteo (open-meteo, sans cle) -----------------------------------------
+# --- weather (open-meteo, no key) -------------------------------------------
 
 WMO = {
     0: "ciel dégagé", 1: "plutôt dégagé", 2: "partiellement nuageux", 3: "couvert",
@@ -156,7 +156,7 @@ def _geocode(city: str):
     return latlon
 
 
-# une famille de temps (glyphe) par code wmo, pour l'illustration de la scene.
+# one weather family (glyph) per wmo code, for the scene illustration.
 def weather_glyph(code: int) -> str:
     if code == 0:
         return "clear"
@@ -180,16 +180,16 @@ _weather_lock = threading.Lock()
 
 
 def weather_info() -> dict | None:
-    # meteo brute (voix ET scene visuelle), mise en cache 20 min pour ne pas
-    # rappeler l'api a chaque rafraichissement de la scene.
+    # raw weather (for the voice AND the visual scene), cached for 20 min so we
+    # don't call the api again on every refresh of the scene.
     with _weather_lock:
         age = time.time() - _weather_cache["ts"]
         usable = (_weather_cache["info"] is not None
                   and _weather_cache["city"] == CITY)
         if usable and age < 1200:
             return dict(_weather_cache["info"])
-        # hors ligne, une meteo d'il y a deux heures vaut mieux qu'un briefing
-        # ampute : la temperature bouge de deux degres, la saison ne change pas.
+        # offline, two-hour-old weather beats an amputated briefing: the
+        # temperature moves a couple of degrees, the season doesn't change.
         if usable and age < 10800 and not net.reachable("meteo"):
             return dict(_weather_cache["info"])
     if not net.reachable("meteo"):
@@ -226,12 +226,12 @@ def weather_info() -> dict | None:
 
 
 def weather_sentence() -> str:
-    """La meteo en une phrase, sans repeter le meme chiffre.
+    """The weather in one sentence, without saying the same number twice.
 
-    L'ancienne version disait « il fait actuellement 33 degres […] aujourd'hui
-    jusqu'a 33 degres » : quand la temperature du moment est deja le maximum du
-    jour, annoncer le maximum n'apprend rien et donne l'impression qu'ava
-    meuble.
+    The old version said "il fait actuellement 33 degres […] aujourd'hui jusqu'a
+    33 degres": when the current temperature is already the day's high,
+    announcing the high teaches you nothing and makes ava sound like she's
+    padding.
     """
     info = weather_info()
     if not info:
@@ -243,17 +243,16 @@ def weather_sentence() -> str:
     return f"{opening}. On ira jusqu'à {tmax} degrés, avec {tmin} au plus bas."
 
 
-# --- actu ia (google news rss, sans cle) -----------------------------------
+# --- ai news (rss feeds, no key) --------------------------------------------
 
-# l'actualite est figee pour toute la duree d'une session : le briefing du matin
-# et la scene de demarrage doivent raconter la meme chose. `ai_news` gere la
-# peremption sur le disque (3 h).
+# the news is frozen for the whole session: the morning briefing and the startup
+# scene have to tell the same story. `ai_news` handles expiry on disk (3 h).
 _AI_NEWS_LOCK = threading.Lock()
 _AI_NEWS_RUNTIME: dict = {}
 
 
 def ai_news_item() -> dict:
-    """L'actualite ia du moment. Le detail vit dans `ai_news` (flux rss dates)."""
+    """The current ai story. The detail lives in `ai_news` (dated rss feeds)."""
     global _AI_NEWS_RUNTIME
     with _AI_NEWS_LOCK:
         if _AI_NEWS_RUNTIME:
@@ -268,12 +267,12 @@ def ai_news_item() -> dict:
 
 
 def localized_ai_title(title: str, source: str = "") -> str:
-    """Un titre d'actualite prononcable par une voix francaise.
+    """A headline a french voice can actually pronounce.
 
-    La traduction passait par Ollama, qui ne tourne pas : les titres anglais
-    arrivaient donc intacts dans la synthese vocale francaise. `ai_news` s'en
-    charge desormais avec le meme petit modele que le routage d'intentions, et
-    garde le resultat sur le disque.
+    Translation used to go through Ollama, which isn't running, so english
+    headlines arrived intact at a french synthesiser. `ai_news` handles it now
+    with the same small model as the intent router, and keeps the result on
+    disk.
     """
     return ai_news.translate_title(title)
 
@@ -281,13 +280,13 @@ def localized_ai_title(title: str, source: str = "") -> str:
 def ai_news_sentence() -> str:
     item = ai_news_item()
     if not item:
-        # mieux vaut sauter la rubrique que meubler : une actualite absente ne
-        # merite pas qu'on en parle pendant le briefing.
+        # better to skip the section than to pad: a story that isn't there
+        # doesn't deserve airtime in the briefing.
         return ""
     return ai_news.sentence(item)
 
 
-# --- agenda du jour (calendar.app, donc google agenda s'il est synchronise) --
+# --- today's calendar (calendar.app, so google calendar if it syncs) --------
 
 CALENDAR = MacCalendar()
 GOOGLE_CALENDAR = google_calendar.CALENDAR
@@ -298,21 +297,21 @@ MONTHS_FR = ("", "janvier", "février", "mars", "avril", "mai", "juin", "juillet
 
 
 def spoken_date(day: datetime.date | None = None) -> str:
-    """« samedi 8 août », tel qu'on le dit a voix haute."""
+    """\"samedi 8 août\", the way you'd say it out loud."""
     day = day or datetime.date.today()
     number = "premier" if day.day == 1 else str(day.day)
     return f"{WEEKDAYS_FR[day.weekday()]} {number} {MONTHS_FR[day.month]}"
 
 
 def spoken_title(title: str) -> str:
-    """Rend un titre d'agenda dicible.
+    """Make a calendar title sayable.
 
-    Les titres de Matheus sont pleins d'emojis (« 💻 Exo code #1 ») : la voix
-    de synthese les prononce ou s'etrangle dessus. On enleve aussi le dieze,
-    qui se lit « croisillon » au lieu de « numero ».
+    Calendar titles are full of emoji ("💻 Exo code #1"), and the synthesiser
+    either pronounces them or chokes on them. We also drop the hash, which comes
+    out as "croisillon" instead of "numero".
     """
     value = str(title or "").strip()
-    # emojis, pictogrammes, drapeaux, variantes et jointures
+    # emoji, pictographs, flags, variation selectors and joiners
     value = re.sub(
         "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
         "\U00002190-\U000021FF\U00002B00-\U00002BFF️‍•]",
@@ -323,18 +322,18 @@ def spoken_title(title: str) -> str:
 
 
 def _spoken_hour(moment: datetime.datetime) -> str:
-    # "14h30" se lit mal : on prefere "14 heures 30", et "midi pile" reste "12 heures".
+    # "14h30" reads badly: "14 heures 30" is better, and "midi pile" stays "12 heures".
     if moment.minute == 0:
         return f"{moment.hour} heures"
     return f"{moment.hour} heures {moment.minute:02d}"
 
 
 def agenda_events(day_offset: int = 0):
-    """Les rendez-vous d'un jour, quelle que soit la source.
+    """A day's events, whatever the source.
 
-    Google Agenda gagne des qu'il est connecte (c'est celui que Matheus tient
-    vraiment a jour) ; Calendar.app reste le repli hors-ligne. Les deux
-    renvoient des objets aux memes attributs, donc la suite s'en moque.
+    Google Calendar wins as soon as it's connected (it's the one that's actually
+    kept up to date); Calendar.app stays the offline fallback. Both return
+    objects with the same attributes, so nothing downstream cares.
     """
     if GOOGLE_CALENDAR.connected():
         try:
@@ -346,23 +345,21 @@ def agenda_events(day_offset: int = 0):
 
 
 def calendar_sentence(limit: int = 3) -> str:
-    """L'agenda du jour, en tete du briefing. Silencieuse si l'agenda n'est pas
-    lisible : un briefing du matin n'est pas le moment de rappeler une
-    autorisation.
+    """Today's calendar, at the top of the briefing. Silent if the calendar can't
+    be read: a morning briefing is no time to bring up a permission dialog.
 
-    On annonce **le compte d'abord**, puis les trois prochains rendez-vous, puis
-    le reste en nombre. Enumerer les dix rendez-vous d'une journee chargee
-    poussait le briefing au-dela de la minute, et personne ne retient le
-    dixieme ; le compte, lui, dit tout de suite a quoi ressemble la journee.
-    Les rendez-vous deja passes ne sont jamais cites — a 14 h, ceux du matin
-    n'apprennent plus rien.
+    We say **the count first**, then the next three events, then the rest as a
+    number. Listing all ten events of a busy day pushed the briefing past a
+    minute, and nobody remembers the tenth; the count tells you what the day
+    looks like straight away. Events already past are never mentioned — at 2 pm,
+    this morning's teach you nothing.
     """
     try:
         events, _source = agenda_events(0)
     except Exception:  # noqa: BLE001 - agenda indisponible, on n'en parle pas
         return ""
     now = datetime.datetime.now()
-    # ce qui est deja passe n'interesse plus personne a 9 h du matin.
+    # what has already happened is of no interest at 9 in the morning.
     upcoming = [event for event in events if event.all_day or event.end >= now]
     if not events:
         return "Ton agenda est vide aujourd'hui, la journée t'appartient."
@@ -375,8 +372,8 @@ def calendar_sentence(limit: int = 3) -> str:
             details.append(f"toute la journée, {spoken_title(event.title)}")
         else:
             details.append(f"à {_spoken_hour(event.start)}, {spoken_title(event.title)}")
-    # chaque rendez-vous fait sa propre phrase : enchaines par des points-virgules
-    # ils sortaient d'une traite, sans respiration pour les separer a l'oreille.
+    # each event gets its own sentence: strung together with semicolons they came
+    # out in one breath, with no pause to separate them by ear.
     body = ". ".join(detail[0].upper() + detail[1:] for detail in details) + "."
     if len(upcoming) == 1:
         return "Tu as un seul rendez-vous aujourd'hui, " + details[0] + "."
@@ -392,32 +389,32 @@ def build_startup_payload(*, fetch_news: bool = True, briefing: str | None = Non
     weekdays = ("LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI", "DIMANCHE")
     months = ("", "JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE")
     news = ai_news_item() if fetch_news else {}
-    # meteo (illustration) + briefing ecrit ("ce qu'ava dit") seulement au
-    # passage enrichi : le 1er passage reste instantane (etat "loading").
+    # weather (illustration) and the written briefing ("what ava says") only on
+    # the enriched pass: the first pass stays instant (state "loading").
     weather = weather_info() if fetch_news else None
-    # `briefing` peut etre impose par l'appelant : le reveil a deja fabrique ce
-    # texte-la ET l'audio correspondant. Le recalculer ici donnait un transcript
-    # different de ce qu'Ava prononce (l'agenda et l'heure ont bouge entre-temps),
-    # et refaisait pour rien les appels agenda + base Promethee.
+    # `briefing` can be forced by the caller: the wake-up already built that text
+    # AND the matching audio. Recomputing it here produced a transcript different
+    # from what Ava says (the calendar and the time moved in between), and redid
+    # the calendar and Promethee lookups for nothing.
     if briefing is None:
         briefing = build_welcome_text() if fetch_news else ""
-    # une seule pioche : afficher une citation et en prononcer une autre donnerait
-    # l'impression que la scene et la voix ne parlent pas du meme jour.
+    # one draw only: showing one quote while saying another would make it look
+    # like the scene and the voice aren't talking about the same day.
     scene_quote = quotes.of_the_day() if fetch_news else quotes.Quote("", "")
     return {
         "name": USER_NAME,
         "city": CITY,
         "date": f"{weekdays[now.weekday()]} {now.day} {months[now.month]}",
-        # `ai_news` rend deja le titre traduit : le repasser dans la traduction
-        # ne ferait que le renvoyer tel quel, en payant un aller-retour reseau.
+        # `ai_news` already hands back a translated headline: putting it through
+        # translation again would return it unchanged, for one network round trip.
         "news": news.get("title", "") if news else "Recherche d'une actualité IA récente…",
         "source": news.get("source", "Vérification en cours"),
         "source_url": news.get("url", ""),
         "published": news.get("published", ""),
-        # « hier », « ce matin » : la fraicheur se lit aussi a l'ecran.
+        # "hier", "ce matin": freshness reads on screen too.
         "freshness": news.get("freshness", "") if news else "",
-        # le salut suit l'heure, comme le briefing parle : « BONJOUR » en gros a
-        # 22 h, a cote d'un texte qui dit « Bonsoir », ca se voyait tout de suite.
+        # the greeting follows the clock, like the spoken briefing does: a huge
+        # "BONJOUR" at 10 pm next to text saying "Bonsoir" was impossible to miss.
         "hello": greeting_word(now),
         "quote": scene_quote.text if fetch_news else "Ton prochain niveau commence par ce que tu fais maintenant.",
         "quote_author": scene_quote.author if fetch_news else "",
@@ -435,18 +432,17 @@ def greeting_word(moment: datetime.datetime | None = None) -> str:
 
 
 def build_welcome_text() -> str:
-    """Le briefing, dans l'ordre ou il sert.
+    """The briefing, in the order it's useful.
 
-    L'ordre n'est pas decoratif. On ouvre sur le repere (qui parle, quand), on
-    donne **tout de suite** ce qui engage la journee — l'agenda — puis seulement
-    le decor, et on ferme sur l'action. Avant, les cinq blocs arrivaient a plat,
-    du meme ton, colles bout a bout : la seule information vraiment utile
-    (« tu as un rendez-vous a 20 h ») etait noyee entre la meteo et une citation
-    anonyme, et ca s'ouvrait sur « c'est Ava, j'espere que tu vas bien ! »,
-    repete a l'identique tous les matins.
+    The order isn't decorative. We open with the bearings (who's talking, when),
+    give **immediately** what commits the day — the calendar — then the scenery,
+    and close on the action. Before, the five blocks arrived flat, in the same
+    tone, glued end to end: the one genuinely useful line ("tu as un rendez-vous
+    a 20 h") was buried between the weather and an anonymous quote, and it
+    opened on "c'est Ava, j'espere que tu vas bien !", identical every morning.
 
-    Chaque bloc porte maintenant sa propre entree en matiere, pour qu'on entende
-    qu'on change de sujet sans avoir a le dire.
+    Each block now carries its own way in, so you hear the subject change
+    without having to be told.
     """
     now = datetime.datetime.now()
     parts = [f"{greeting_word(now)} {USER_NAME}. "
@@ -467,9 +463,9 @@ def build_welcome_text() -> str:
     quote = quotes.of_the_day()
     parts.append(quotes.spoken_intro(quote))
 
-    # l'espace se monte pendant qu'elle parle : au moment ou elle arrive ici,
-    # les fenetres sont deja en place. Annoncer « je t'ouvre tes applications »
-    # apres coup sonnerait faux.
+    # the workspace goes up while she talks: by the time she gets here the
+    # windows are already in place. Announcing "je t'ouvre tes applications"
+    # afterwards would ring false.
     if promethee.active_session():
         parts.append("Ta session Prométhée tourne déjà, ton espace est en place. "
                      "Bon travail !")
@@ -481,7 +477,7 @@ def build_welcome_text() -> str:
 CACHE_DIR = paths.cache_dir("ava_welcome")
 INSTANCE_LOCK = SingleInstanceLock(paths.cache_dir("ava.lock"))
 
-# --- overlay visuel (fenetre orbe en haut a droite) -------------------------
+# --- the visual overlay (orb window, top right) ------------------------------
 OVERLAY_ENABLED = os.getenv("AVA_OVERLAY", os.getenv("JARVIS_OVERLAY", "1")).strip().lower() not in (
     "0", "false", "no", "off")
 try:
@@ -498,7 +494,7 @@ except Exception:                       # hors macos : pas de barre de menus
 
 
 def ui(fn: str, *args) -> None:
-    # relaie un etat vers l'overlay s'il est actif, sinon ne fait rien
+    # pass a state on to the overlay if it is up, otherwise do nothing
     if OVERLAY_ENABLED and _overlay is not None:
         try:
             getattr(_overlay, fn)(*args)
@@ -507,15 +503,15 @@ def ui(fn: str, *args) -> None:
 
 
 def _render_assistant_state(snapshot) -> None:
-    # l'etat fonctionnel et l'etat visuel restent toujours synchronises.
+    # the functional state and the visible state never drift apart.
     if snapshot.state == AvaState.DORMANT:
         ui("dormant")
     elif snapshot.state == AvaState.IDLE:
         ui("idle")
     elif snapshot.state != AvaState.BOOTING:
         ui("set_state", snapshot.state.value, snapshot.label or None)
-    # l'icone de la barre de menus est le seul retour visuel qui subsiste quand
-    # le panneau est ferme : elle doit suivre le meme etat.
+    # the menu bar icon is the only visual feedback left once the panel is
+    # closed, so it has to follow the same state.
     if MENU_BAR is not None:
         try:
             MENU_BAR.set_state(snapshot.state.value)
@@ -530,7 +526,7 @@ def set_assistant_state(state: AvaState | str, label: str = "", *, force=False) 
     try:
         ASSISTANT_STATE.transition(state, label, force=force)
     except InvalidTransition:
-        # un flux qui se termine doit toujours pouvoir remettre ava en veille.
+        # a stream that ends must always be able to put ava back to sleep.
         if state == AvaState.DORMANT or state == AvaState.DORMANT.value:
             ASSISTANT_STATE.dormant()
         elif DEBUG:
@@ -538,17 +534,17 @@ def set_assistant_state(state: AvaState | str, label: str = "", *, force=False) 
 
 
 def return_to_idle() -> None:
-    """Revient au mini-plugin, ou le cache si l'utilisateur l'a demande."""
+    """Go back to the panel, or hide it if that's what was asked for."""
     if SETTINGS.get("ui", {}).get("start_hidden", False):
         ASSISTANT_STATE.dormant()
     else:
         ASSISTANT_STATE.idle()
 
 
-# --- actions du reveil ------------------------------------------------------
+# --- what the wake-up does --------------------------------------------------
 
 def _osascript(script: str) -> None:
-    # petit helper : lance un bout d'applescript, sans planter si ca rate
+    # small helper: run a bit of applescript without dying if it fails
     try:
         subprocess.run(["osascript", "-e", script], check=False,
                        capture_output=True, timeout=15)
@@ -560,12 +556,12 @@ def _osascript(script: str) -> None:
 def play_spotify() -> None:
     print("  -> spotify")
     if SPOTIFY_URI:
-        # Une cible explicite reste prioritaire. La configuration attend une URI
-        # Spotify (spotify:playlist:...), pas un lien web.
+        # An explicit target wins. The configuration expects a Spotify URI
+        # (spotify:playlist:...), not a web link.
         _osascript(f'tell application "Spotify" to play track "{SPOTIFY_URI}"')
         return
-    # Sans cible, Spotify reprend son dernier contexte d'ecoute. On active le
-    # shuffle puis on avance pour obtenir un morceau different au rituel.
+    # With no target, Spotify picks its last listening context back up. We turn
+    # shuffle on and skip ahead so the ritual gets a different track.
     _osascript('''
     tell application "Spotify"
         activate
@@ -578,7 +574,7 @@ def play_spotify() -> None:
 
 
 def screen_bounds() -> tuple[int, int, int, int]:
-    # taille de l'ecran en "points" (pas les pixels retina)
+    # the screen size in "points" (not retina pixels)
     out = subprocess.run(
         ["osascript", "-e",
          'tell application "Finder" to get bounds of window of desktop'],
@@ -600,8 +596,8 @@ def quadrant_rect(where: str, sb: tuple[int, int, int, int]):
     left = x1
     right = x1 + w
     mid = top + h
-    # une petite fenetre calee en bas a droite, avec une marge : de quoi voir ce
-    # qui joue sans manger un quart de l'ecran.
+    # a small window tucked bottom right, with a margin: enough to see what's
+    # playing without eating a quarter of the screen.
     small_w, small_h, margin = 380, 220, 24
     return {
         "tl": (left,  top, w, h),
@@ -613,13 +609,13 @@ def quadrant_rect(where: str, sb: tuple[int, int, int, int]):
 
 
 def open_and_place(app: str, where: str, sb, url: str = "") -> None:
-    # ouvre l'app puis la range dans son coin (via system events).
-    # macos peut demander l'autorisation "accessibilite" la 1re fois.
+    # open the app, then put it in its corner (through system events).
+    # macos may ask for the "accessibility" permission the first time.
     print(f"  -> {app} ({where}){' ' + url if url else ''}")
     launch_name = app
     resolved = APP_CATALOG.resolve(app) if "APP_CATALOG" in globals() else None
     if url:
-        # `open -a <app> <url>` lance l'app *sur* la page voulue, en une fois.
+        # `open -a <app> <url>` starts the app *on* the page we want, in one go.
         target = resolved[1] if resolved else app
         flag = "-a" if not resolved else "-a"
         subprocess.run(["open", flag, target, url], check=False)
@@ -631,12 +627,12 @@ def open_and_place(app: str, where: str, sb, url: str = "") -> None:
     else:
         subprocess.run(["open", "-a", app], check=False)
     x, y, w, h = quadrant_rect(where, sb)
-    # ⚠️ attendre que le *process* existe ne suffit pas : il existe avant
-    # d'avoir peint sa fenetre, et un navigateur ouvert sur une adresse en
-    # fabrique une nouvelle apres coup. On posait donc la geometrie sur une
-    # fenetre qui n'etait pas encore la — resultat, Dia s'etalait sur la moitie
-    # de l'ecran au lieu de tenir dans son quadrant. On attend la fenetre, puis
-    # on **verifie** que la taille a bien pris, et on recommence sinon.
+    # ⚠️ waiting for the *process* isn't enough: it exists before it has painted
+    # a window, and a browser opened on an address makes a new one afterwards. So
+    # we were applying the geometry to a window that wasn't there yet — Dia ended
+    # up spread over half the screen instead of sitting in its quadrant. We wait
+    # for the window, then **check** the size actually took, and start again if
+    # it didn't.
     script = f'''
     tell application "System Events"
         set tries to 0
@@ -676,12 +672,12 @@ def open_startup_apps() -> None:
 
 
 def start_workspace() -> threading.Thread:
-    """Monte l'espace de travail **pendant** qu'Ava parle.
+    """Bring the workspace up **while** Ava talks.
 
-    Avant, les fenetres s'ouvraient une fois le briefing fini : le briefing se
-    deroulait devant un bureau vide, puis, dans le silence, les applications
-    apparaissaient. On regardait deux scenes sans rapport. Menees ensemble, on
-    voit ce qu'elle annonce se faire pendant qu'elle le dit.
+    The windows used to open once the briefing was over: the briefing played out
+    in front of an empty desktop, then, in silence, the applications appeared.
+    You were watching two unrelated scenes. Run together, you see what she
+    announces happening as she says it.
     """
     job = threading.Thread(target=open_startup_apps, daemon=True,
                            name="ava-espace-de-travail")
@@ -690,11 +686,11 @@ def start_workspace() -> threading.Thread:
 
 
 def close_startup_apps() -> list[str]:
-    """Referme ce que le rituel du matin a ouvert. Rend les noms fermes.
+    """Close what the morning ritual opened. Returns the names closed.
 
-    Le pendant manquait : ava dispose les quatre applications en quadrants au
-    reveil, et « ferme tout » partait en recherche web. On ne ferme que la liste
-    configuree — jamais tout ce qui tourne, il y a du travail dans les autres.
+    The counterpart was missing: ava lays four applications out in quadrants at
+    wake-up, and "ferme tout" went off to a web search. We only close the
+    configured list — never everything running, there's work in the others.
     """
     closed: list[str] = []
     for app, _where, _url in APPS:
@@ -704,18 +700,18 @@ def close_startup_apps() -> list[str]:
 
 
 def ensure_welcome_audio(text: str, mood: str = "") -> Path | None:
-    """L'audio d'une phrase, mis en cache. None = il faudra passer par `say`.
+    """A sentence's audio, cached. None means falling through to `say`.
 
-    Le choix du moteur (mistral, chatterbox local, elevenlabs, voix systeme) vit
-    dans voice_tts : ava ne sait plus qui parle, elle sait juste ou est le
-    fichier. `mood` colore le timbre quand le moteur sait le faire.
+    Choosing the engine (mistral, local chatterbox, elevenlabs, system voice)
+    lives in voice_tts: ava no longer knows who's speaking, only where the file
+    is. `mood` colours the timbre when the engine can do that.
     """
     return voice_tts.synthesize(text, mood)
 
 
-# briefing prepare a l'avance pour partir vite au clap.
-# on le rafraichit le matin (changement de jour) ou s'il a plus de 6h,
-# pas a chaque clap -> voix instantanee et quota preserve.
+# the briefing is built ahead of time so it can start the moment you clap.
+# we refresh it in the morning (the day changed) or once it's over 6 h old, not
+# on every clap -> instant voice, and no quota burned.
 _welcome: dict = {"day": None, "ts": 0.0, "text": "", "path": None}
 _welcome_lock = threading.Lock()
 REFRESH_AFTER_S = 6 * 3600
@@ -735,22 +731,22 @@ def get_welcome(force: bool = False):
         return text, path
 
 
-# garde partagee : le clap ET le mot-cle "ok ava" passent par ici, pour ne pas
-# declencher deux reveils coup sur coup. _flow_active bloque tout nouveau
-# declenchement tant que le reveil est en cours (sinon ava, qui dit son propre
-# nom pendant le briefing, se re-declencherait en boucle via le micro).
+# shared guard: the clap AND the "ok ava" wake word both come through here, so
+# two wake-ups can't fire back to back. _flow_active blocks any new trigger while
+# a wake-up is running (otherwise ava, who says her own name during the briefing,
+# would keep re-triggering herself through the mic).
 _last_trigger = {"ts": 0.0}
 _trigger_lock = threading.Lock()
 _flow_active = threading.Event()
 
 
-# ecoute en pause : le micro reste ouvert (le chien de garde continue de
-# surveiller le flux, et rouvrir coreaudio coute cher) mais plus rien ne peut
-# reveiller ava. c'est la reponse au « ava me derange » : un clic dans la barre
-# de menus et elle se tait, sans qu'on ait a la tuer.
-_listening_paused = threading.Event()
-# AVA_PAUSED=1 : ava demarre sans ecouter (pratique pour la regler, ou pour
-# travailler a cote sans qu'elle se reveille).
+# listening paused: the mic stays open (the watchdog keeps an eye on the stream,
+# and reopening coreaudio is expensive) but nothing can wake ava any more. this
+# is the answer to "ava is in the way": one click in the menu bar and she goes
+# quiet, without anyone having to kill her.
+#
+# AVA_PAUSED=1: ava starts without listening (handy while tuning her, or to work
+# next to her without waking her up).
 if os.getenv("AVA_PAUSED", "").strip().lower() in ("1", "true", "yes", "on"):
     _listening_paused.set()
 
@@ -776,8 +772,8 @@ def toggle_listening_paused() -> bool:
 
 
 def _drain_wake_queue() -> None:
-    # on jette l'audio accumule pendant le reveil (le micro a entendu ava
-    # parler dans les enceintes) pour ne pas re-declencher juste apres.
+    # throw away the audio piled up during the wake-up (the mic heard ava talking
+    # through the speakers) so she doesn't re-trigger right after.
     while True:
         try:
             _wake_q.get_nowait()
@@ -786,7 +782,7 @@ def _drain_wake_queue() -> None:
 
 
 def _audio_ms(path) -> int:
-    # duree d'un audio via afinfo (macos), pour caler le transcript sur la voix.
+    # an audio file's duration via afinfo (macos), to pin the transcript to the voice.
     try:
         out = subprocess.run(["afinfo", str(path)], capture_output=True,
                              text=True, timeout=5).stdout
@@ -799,14 +795,14 @@ def _audio_ms(path) -> int:
 
 
 def _spoken_ms(text: str) -> int:
-    # estimation quand on n'a pas de fichier (voix "say") : ~165 mots/minute.
+    # an estimate when there is no file (the "say" voice): ~165 words per minute.
     words = len(str(text or "").split())
     return max(3200, round(words / 165 * 60 * 1000))
 
 
 def start_promethee_session() -> None:
-    # le grand reveil ouvre aussi la journee de travail : une session de focus
-    # dans promethee, sans que matheus ait a cliquer.
+    # the big wake-up opens the working day too: a focus session in promethee,
+    # with nobody having to click.
     try:
         reply = promethee.start_session()
     except Exception as exc:  # noqa: BLE001 - jamais bloquer le reveil pour ca
@@ -819,13 +815,13 @@ WELCOME_WARM_INTERVAL_S = 900
 
 
 def keep_welcome_warm(interval_s: int = WELCOME_WARM_INTERVAL_S) -> None:
-    """Garde le briefing du jour pret a partir, texte ET audio.
+    """Keep today's briefing ready to go, text AND audio.
 
-    Sans ca, le premier « bonjour ava » qui suit un changement de date ou une
-    modification de l'agenda tombe sur un cache vide : la scene de demarrage
-    reste figee ~1 minute, le temps que la voix locale synthetise 45 s de
-    parole. Ici on refait le texte regulierement ; si rien n'a bouge, l'audio
-    est deja en cache et l'operation ne coute rien.
+    Without this, the first "bonjour ava" after the date rolls over or the
+    calendar changes lands on an empty cache: the startup scene freezes for
+    about a minute while the local voice synthesises 45 s of speech. Here we
+    rebuild the text regularly; if nothing moved, the audio is already cached
+    and it costs nothing.
     """
     while True:
         time.sleep(interval_s)
@@ -842,21 +838,21 @@ def run_welcome_flow() -> None:
     try:
         set_assistant_state(AvaState.BOOTING, "Preparation de ton espace", force=True)
         print("*** reveil du bureau ***")
-        # Le rituel reprend la grande scene du lancement. Elle reste au centre
-        # jusqu'a la fin du briefing et de l'ouverture des applications.
+        # The ritual reuses the big launch scene. It stays centred until the
+        # briefing is over and the applications are up.
         startup_payload = build_startup_payload(fetch_news=False)
         startup_payload["auto_finish"] = False
         ui("startup", startup_payload)
         play_spotify()
-        # Promethee met quelques secondes a s'ouvrir et a peindre son bouton :
-        # on lance en parallele du briefing pour que la session soit deja
-        # partie quand ava finit de parler.
+        # Promethee takes a few seconds to open and paint its button, so we set
+        # it off alongside the briefing and the session is already running by the
+        # time ava stops talking.
         promethee_job = threading.Thread(target=start_promethee_session, daemon=True)
         promethee_job.start()
         start_workspace()
 
-        # Garde la scene visible pendant la preparation du briefing ; au premier
-        # lancement le reseau ou ElevenLabs peuvent prendre quelques secondes.
+        # Keep the scene up while the briefing is prepared; on a first launch
+        # the network or ElevenLabs can take a few seconds.
         text, path = get_welcome()
         startup_payload = build_startup_payload(fetch_news=True, briefing=text)
         startup_payload["auto_finish"] = False
@@ -864,10 +860,10 @@ def run_welcome_flow() -> None:
         if path:
             print("  -> voix")
             set_assistant_state(AvaState.SPEAKING, "Ton briefing du matin")
-            # transcript cale sur la duree reelle de la voix (karaoke) : on
-            # demarre afplay AVANT le texte, puis on laisse au lecteur le temps
-            # d'attaquer. Avant, le texte partait le premier et prenait une
-            # demi-seconde d'avance sur la voix pour tout le briefing.
+            # transcript pinned to the real duration of the voice (karaoke): we
+            # start afplay BEFORE the text, then give the player time to get
+            # going. Before, the text went first and ran half a second ahead of
+            # the voice for the whole briefing.
             total = _audio_ms(path) or _spoken_ms(text)
             delays = voice_tts.word_delays(path, text, total)
             player = subprocess.Popen(["afplay", str(path)])
@@ -883,16 +879,16 @@ def run_welcome_flow() -> None:
     finally:
         ui("finish_startup")
         _drain_wake_queue()
-        # le cooldown ne demarre qu'une fois le reveil fini
+        # the cooldown only starts once the wake-up is over
         _last_trigger["ts"] = time.time()
         _flow_active.clear()
         return_to_idle()
 
 
-# le grand rituel n'a de sens qu'une fois : il ouvre la musique, range quatre
-# applications a l'ecran et parle pendant 45 secondes. le rejouer parce qu'on a
-# dit « bonjour ava » a 18 h — ou parce qu'un bruit a ete pris pour un double
-# clap — c'est exactement ce qui rendait ava insupportable en pleine journee.
+# the big ritual only makes sense once: it starts the music, lays four
+# applications out on screen and talks for 45 seconds. replaying it because
+# somebody said "bonjour ava" at 6 pm — or because a noise passed for a double
+# clap — is exactly what made ava unbearable during the day.
 _ritual = {"day": None}
 
 
@@ -905,7 +901,7 @@ def mark_ritual_done(day: str | None = None) -> None:
 
 
 def run_short_greeting() -> None:
-    """Le bonjour d'apres : ava salue et ecoute, sans rejouer tout le rituel."""
+    """The later hello: ava greets you and listens, without replaying the ritual."""
     try:
         hour = datetime.datetime.now().hour
         moment = "Bonjour" if hour < 18 else "Bonsoir"
@@ -923,8 +919,8 @@ def trigger_welcome(source: str) -> None:
         if _flow_active.is_set() or now - _last_trigger["ts"] < FLOW_COOLDOWN_S:
             return
         _last_trigger["ts"] = now
-        # reserve le flux AVANT de lancer le thread : sans cela, le mot-cle peut
-        # gagner la course et demarrer une seconde interaction en parallele.
+        # claim the flow BEFORE starting the thread: without that, the wake word
+        # can win the race and start a second interaction alongside.
         _flow_active.set()
         already = ritual_done_today()
         if not already:
@@ -938,11 +934,11 @@ def trigger_welcome(source: str) -> None:
         raise
 
 
-# --- mot-cle vocal "ok ava" (vosk, hors-ligne) -----------------------------
-# sur mac, ouvrir deux flux micro en meme temps est instable (erreurs coreaudio).
-# on garde donc UN seul flux (celui du clap, a 48000 hz) et on lui repique
-# l'audio : on le reechantillonne a 16000 hz pour vosk et on le pousse dans
-# cette file. le clap et "ok ava" partagent ainsi le meme micro.
+# --- the "ok ava" wake word (vosk, offline) ---------------------------------
+# on a mac, opening two mic streams at once is unstable (coreaudio errors). so we
+# keep ONE stream (the clap one, at 48000 hz) and tap its audio: resample it to
+# 16000 hz for vosk and push it into this queue. the clap and "ok ava" therefore
+# share the same microphone.
 WAKE_MODEL_DIR = paths.MODELS_DIR / "vosk-model-small-fr-0.22"
 WAKE_SR = 16000
 WAKE_ENABLED = WAKE_MODEL_DIR.exists()
@@ -951,9 +947,9 @@ _command_q: queue.Queue = queue.Queue(maxsize=1800)
 _capture_audio = threading.Event()
 
 
-# gain applique a la voix avant vosk : sans lui il faut "gueuler" pour reveiller.
-# soft-limiter tanh -> on booste la voix normale/douce sans saturer les pics.
-# reglable via AVA_WAKE_GAIN (0 ou 1 = desactive).
+# gain applied to the voice before vosk: without it you have to shout to wake
+# her. a tanh soft limiter boosts a normal or quiet voice without clipping peaks.
+# tunable with AVA_WAKE_GAIN (0 or 1 disables it).
 try:
     WAKE_GAIN = float(os.getenv("AVA_WAKE_GAIN", "4.0"))
 except ValueError:
@@ -971,7 +967,7 @@ def resample_for_wake(mono: np.ndarray, rate: int) -> bytes:
         target_x = np.linspace(0, len(mono) - 1, out_size)
         downsampled = np.interp(target_x, source_x, mono)
     if WAKE_GAIN > 1.0:
-        # tanh : ~lineaire (x*gain) sur la voix douce, sature en douceur sur les pics
+        # tanh: ~linear (x*gain) on a soft voice, saturating gently on peaks
         downsampled = np.tanh(downsampled * WAKE_GAIN)
     return (np.clip(downsampled, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
 
@@ -991,9 +987,9 @@ def _put_drop_oldest(q: queue.Queue, item) -> None:
 
 
 def push_wake_audio(mono: np.ndarray, rate: int) -> None:
-    # reechantillonne vraiment vers 16000 hz, y compris au fallback 44100 hz.
-    # le callback micro ne doit jamais bloquer : si vosk prend du retard, on
-    # abandonne le bloc le plus ancien au lieu de faire grossir la ram.
+    # really resample to 16000 hz, including on the 44100 hz fallback.
+    # the mic callback must never block: if vosk falls behind we drop the oldest
+    # block instead of letting the ram grow.
     pcm = resample_for_wake(mono, rate)
     if not pcm:
         return
@@ -1003,7 +999,7 @@ def push_wake_audio(mono: np.ndarray, rate: int) -> None:
         _put_drop_oldest(_command_q, pcm)
 
 
-# --- la voix d'ava (reponses courtes) --------------------------------------
+# --- ava's voice (short answers) --------------------------------------------
 
 def _illustration_for(text: str) -> str:
     """Choisit une petite illustration locale, jamais une image decorative lourde."""
@@ -1022,11 +1018,11 @@ def _illustration_for(text: str) -> str:
         return "screen"
     return "spark"
 
-# le lecteur en cours, pour pouvoir l'arreter net. c'est l'idee de fond des
-# pipelines temps reel (pipecat propage une « interruption » qui vide les
-# tampons de chaque etage) ramenee a ce qu'ava a besoin : tant qu'on attendait
-# `player.wait()`, un briefing de trente secondes etait **insecable**, et la
-# seule facon de la faire taire etait de la tuer.
+# the player currently running, so it can be stopped dead. this is the core idea
+# of real-time pipelines (pipecat propagates an "interruption" that flushes every
+# stage's buffers) cut down to what ava needs: while we waited on `player.wait()`
+# a thirty-second briefing was **indivisible**, and the only way to shut her up
+# was to kill her.
 _player_lock = threading.Lock()
 _player: subprocess.Popen | None = None
 _interrupted = threading.Event()
@@ -1053,22 +1049,22 @@ def speaking() -> bool:
 
 
 def speak(text: str, state: str = "speaking") -> None:
-    # met l'orbe dans l'etat voulu + affiche le texte, puis parle.
-    # la voix est fabriquee en local et mise en cache par texte ; si le modele
-    # ne se charge pas, on bascule sur la voix systeme macos "say".
+    # put the orb in the right state, show the text, then speak.
+    # the voice is made locally and cached by text; if the model won't load we
+    # fall through to the macos system voice, `say`.
     global _player
     set_assistant_state(state, text)
-    # on mesure la fabrication de la voix, pas la lecture : c'est l'attente
-    # avant qu'ava ouvre la bouche qui se ressent.
+    # we measure making the voice, not playing it: the wait before ava opens her
+    # mouth is the part you feel.
     with traces.span("voix", route=voice_tts.engine_name()) as trace:
         cached = voice_tts.is_cached(text)
         path = ensure_welcome_audio(text)
-        # une phrase deja dite sort du disque : ni reseau, ni attente.
+        # a sentence already said comes off the disk: no network, no waiting.
         trace["route"] = "cache" if cached else voice_tts.engine_name()
         trace["network"] = not cached and voice_tts.engine_name() == "mistral"
     if path:
-        # meme calage que le briefing : la voix demarre, puis la bulle se
-        # remplit au rythme mesure sur l'audio.
+        # same alignment as the briefing: the voice starts, then the bubble
+        # fills at the pace measured on the audio.
         delays = voice_tts.word_delays(path, text, _audio_ms(path) or _spoken_ms(text))
         _interrupted.clear()
         player = subprocess.Popen([voice_tts.tool_path("afplay"), str(path)])
@@ -1089,12 +1085,12 @@ def speak(text: str, state: str = "speaking") -> None:
 
 
 def start_timer(seconds: float, text: str) -> threading.Timer:
-    """Un minuteur qui ne retient pas Ava au moment de quitter.
+    """A timer that doesn't hold Ava back when you quit.
 
-    ⚠️ `threading.Timer` fabrique un thread **non-daemon** : un minuteur de
-    trente minutes empechait donc le process de se terminer pendant trente
-    minutes. Comme le launchagent ne relance qu'apres une sortie effective,
-    « quitter » depuis la barre de menus paraissait simplement ne rien faire.
+    ⚠️ `threading.Timer` makes a **non-daemon** thread, so a thirty-minute timer
+    kept the process from exiting for thirty minutes. Since the launch agent
+    only restarts after a real exit, "quit" from the menu bar simply looked like
+    it did nothing.
     """
     timer = threading.Timer(seconds, notify, args=(text,))
     timer.daemon = True
@@ -1122,15 +1118,15 @@ def notify(text: str) -> None:
         return_to_idle()
 
 
-# --- comprendre et executer une commande -----------------------------------
+# --- understanding and running a command ------------------------------------
 
 def _norm(s: str) -> str:
-    # minuscules + sans accents, pour comparer facilement
+    # lowercase and unaccented, so comparisons are easy
     s = unicodedata.normalize("NFD", s.lower())
     return "".join(c for c in s if unicodedata.category(c) != "Mn").strip()
 
 
-# quelques raccourcis parle -> vraie app (le reste est trouve automatiquement)
+# a few spoken shortcuts -> the real app (the rest is found automatically)
 _APP_ALIASES = {
     "chrome": "Google Chrome", "google chrome": "Google Chrome",
     "navigateur": "Safari", "safari": "Safari",
@@ -1192,7 +1188,7 @@ def _open_target(target: str) -> None:
     speak(f"Désolée, je ne trouve pas l'application {target}.")
 
 
-# petits nombres en toutes lettres (whisper ecrit souvent les chiffres, mais au cas ou)
+# small numbers spelled out (whisper usually writes digits, but just in case)
 _NUM_WORDS = {
     "zero": 0, "un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5,
     "six": 6, "sept": 7, "huit": 8, "neuf": 9, "dix": 10, "onze": 11, "douze": 12,
@@ -1215,9 +1211,9 @@ def _parse_number(text: str):
     return total if found else None
 
 
-# en francais on compte le quart d'heure avant la minute. sans ces trois cas,
-# « rappelle-moi dans un quart d'heure » comprenait « un » puis « heure » et
-# lancait un minuteur d'UNE HEURE.
+# in french the quarter hour is counted before the minute. without these three
+# cases, "rappelle-moi dans un quart d'heure" understood "un" then "heure" and
+# started a ONE HOUR timer.
 _FRACTION_DURATIONS = (
     ("trois quarts d heure", 45 * 60, "trois quarts d'heure"),
     ("trois quarts d'heure", 45 * 60, "trois quarts d'heure"),
@@ -1264,15 +1260,15 @@ def _spotify(cmd: str) -> None:
 
 
 def _flat(command: str) -> str:
-    # « rendez-vous », « rendez vous », « apres-demain »... : les tirets sont un
-    # hasard de transcription, on les efface avant de chercher des mots-cles.
+    # "rendez-vous", "rendez vous", "apres-demain"…: the hyphens are an accident
+    # of transcription, so we wipe them before looking for keywords.
     return re.sub(r"[-']", " ", str(command or ""))
 
 
-# on ne dit presque jamais le mot « agenda » pour demander son agenda : on
-# demande « qu'est-ce que j'ai aujourd'hui », « c'est quoi mon programme
-# demain », « a quelle heure est mon rendez-vous ». exiger le mot envoyait ces
-# trois formulations — les plus courantes — en recherche web.
+# people almost never say the word "agenda" when asking about their calendar:
+# they say "qu'est-ce que j'ai aujourd'hui", "c'est quoi mon programme demain",
+# "a quelle heure est mon rendez-vous". requiring the word sent those three
+# phrasings — the most common ones — off to a web search.
 _AGENDA_NOUNS = ("rendez vous", "rdv", "mes reunions", "ma reunion", "planning",
                  "emploi du temps", "mon programme", "ma journee", "mes evenements")
 _AGENDA_ASKS = ("qu est ce que j ai", "qu est ce qu il y a", "j ai quoi",
@@ -1321,7 +1317,7 @@ def _calendar_summary(command: str) -> None:
     speak(head + " : " + " ; ".join(details) + ".")
 
 
-# --- ecrire dans l'agenda ----------------------------------------------------
+# --- writing to the calendar ------------------------------------------------
 
 _EVENT_VERBS = ("ajoute", "ajouter", "cree", "creer", "note", "planifie", "programme",
                 "mets", "met", "bloque", "reserve", "cale")
@@ -1337,13 +1333,13 @@ def _is_calendar_create(command: str) -> bool:
 
 
 def _event_title(raw: str) -> str:
-    """Sort le libelle du rendez-vous d'une phrase dictee."""
+    """Pull the event's label out of a dictated sentence."""
     value = str(raw or "").strip()
-    # « ... appelé X », « ... pour X », « ... : X » : ce qui suit est le titre.
+    # "… appelé X", "… pour X", "… : X": whatever follows is the title.
     for marker in (" intitule ", " intitulé ", " appele ", " appelé ", " nomme ", " nommé "):
         if marker in value.lower():
             return value[value.lower().index(marker) + len(marker):].strip(" .")[:120] or "Rendez-vous"
-    # sinon on retire les mots de service et les indications de temps.
+    # otherwise strip the filler words and the time markers.
     cleaned = re.sub(
         r"\b(ava|s'?il te pla[iî]t|ajoute|ajouter|cr[ée]{1,2}|cr[ée]er|note|planifie|programme|"
         r"mets|met|bloque|r[ée]serve|cale|un|une|le|la|les|des|du|de|dans|sur|à|a|mon|ma|mes|"
@@ -1392,7 +1388,7 @@ def _is_screen_diagnosis(command: str) -> bool:
 
 def _diagnose_screen(question: str) -> None:
     set_assistant_state(AvaState.THINKING, "Analyse locale de ton ecran")
-    # Le panneau d'Ava ne doit pas masquer le message que l'utilisateur montre.
+    # Ava's panel must not cover the message the user is pointing at.
     ui("hide")
     time.sleep(0.22)
     reply = SCREEN_VISION.capture_and_analyze(question)
@@ -1417,10 +1413,10 @@ def _present_research(reply: ResearchReply) -> None:
 
 
 def _research(query: str, *, om_match: bool = False) -> None:
-    # hors ligne, Ava repondait « je n'ai pas trouve de source suffisamment
-    # claire » : elle avait l'air d'avoir cherche et echoue, alors qu'elle
-    # n'etait meme pas sortie du mac. dire la vraie raison evite de repeter la
-    # question dix fois en croyant mal la poser.
+    # offline, Ava used to answer "je n'ai pas trouve de source suffisamment
+    # claire": she sounded like she'd searched and failed, when she hadn't even
+    # left the mac. saying the real reason saves you asking the same question ten
+    # times thinking you phrased it badly.
     if net.is_offline():
         _mark_route("hors-ligne")
         speak("Je n'ai pas de réseau pour le moment, je ne peux pas aller chercher ça.")
@@ -1431,8 +1427,8 @@ def _research(query: str, *, om_match: bool = False) -> None:
             query, synthesizer=_research_synthesizer,
         )
     except Exception as exc:  # noqa: BLE001 - reseau coupe, page illisible...
-        # la recherche web est le dernier recours du routage : si elle explose,
-        # c'est toute la commande qui mourait.
+        # the web search is the routing's last resort: if it blows up, it used
+        # to take the whole command down with it.
         if DEBUG:
             print(f"[recherche] echec : {exc}")
         speak("Je n'arrive pas à chercher sur le web pour le moment.")
@@ -1440,7 +1436,7 @@ def _research(query: str, *, om_match: bool = False) -> None:
     _present_research(reply)
 
 
-# une duree qui contient le mot « heure » n'est pas une question sur l'heure.
+# a duration containing the word "heure" is not a question about the time.
 _DURATION_HINTS = ("quart d heure", "quart d'heure", "demi heure", "demi-heure",
                    "minuteur", "chrono", "timer", "rappelle", "reveille",
                    "previens", "pendant")
@@ -1449,12 +1445,11 @@ _APPOINTMENT_HINTS = ("rendez vous", "rendez-vous", "rdv", "reunion", "reunions"
 
 
 def _is_time_question(command: str) -> bool:
-    """« Quelle heure il est ? » — et surtout rien d'autre.
+    """\"Quelle heure il est ?\" — and nothing else, above all.
 
-    Tester `"heure" in c` attrapait tout ce qui contient le mot : « rappelle-moi
-    dans un quart d'heure » se faisait repondre l'heure qu'il est au lieu de
-    lancer un minuteur, et « a quelle heure est mon rendez-vous » ne regardait
-    jamais l'agenda.
+    Testing `"heure" in c` caught everything containing the word: "rappelle-moi
+    dans un quart d'heure" got told the time instead of starting a timer, and "a
+    quelle heure est mon rendez-vous" never looked at the calendar.
     """
     value = str(command or "")
     if "heure" not in value:
@@ -1463,7 +1458,7 @@ def _is_time_question(command: str) -> bool:
         return False
     if any(hint in value for hint in _APPOINTMENT_HINTS):
         return False
-    # « dans deux heures », « dans une heure » : c'est un delai, pas une question.
+    # "dans deux heures", "dans une heure": that's a delay, not a question.
     if re.search(r"\bdans\s+\S+\s*heure", value):
         return False
     return bool(re.search(r"\b(?:quelle heure|l heure|l'heure|heure qu il est|"
@@ -1478,7 +1473,7 @@ def _looks_current_or_web(command: str) -> bool:
     ))
 
 
-# « merci » est deja traite plus haut dans le routage : on ne le redouble pas.
+# "merci" is handled higher up in the routing: no need to double it here.
 SMALL_TALK = {
     "super": "Content que ça t'aille.",
     "cool": "Content que ça t'aille.",
@@ -1511,11 +1506,11 @@ def _small_talk(command: str) -> str:
 
 
 def execute_command(cmd: str) -> None:
-    """Point d'entree unique, et filet de securite : quoi qu'il arrive en
-    dessous, Ava doit repondre quelque chose plutot que mourir en silence.
+    """The single way in, and the safety net: whatever happens below, Ava has to
+    answer something rather than die quietly.
 
-    C'est aussi le point de mesure : on note la route empruntee et le temps mis,
-    jamais ce qui a ete dit (voir l'entete de `traces`).
+    It's also the measurement point: we note the route taken and the time it
+    took, never what was said (see the header of `traces`).
     """
     with traces.span("commande", route="integre", network=False) as trace:
         _ROUTE.route = "integre"
@@ -1531,17 +1526,17 @@ def execute_command(cmd: str) -> None:
             trace["network"] = _ROUTE.network
 
 
-# la route empruntee se decide au fond du routage : on la note au passage plutot
-# que de faire remonter une valeur de retour a travers vingt branches.
+# which route was taken is decided deep in the routing: we note it in passing
+# rather than threading a return value back up through twenty branches.
 _ROUTE = threading.local()
 
-# le nom dit tout seul apres le reveil : c'est un appel, pas une commande.
+# the name said on its own after waking: that's somebody calling, not a command.
 _CALLED_BY_NAME = frozenset({"ava", "hey ava", "ok ava", "eva", "avah"})
-# ce que la transcription rend quand on hesite : ni commande, ni question.
+# what transcription gives back when you hesitate: neither command nor question.
 _FILLERS = frozenset({"euh", "heu", "hein", "hm", "hmm", "mmh", "bah", "ben",
                       "voila", "donc", "alors"})
-# une phrase coupee net : on redemande le complement au lieu de chercher le
-# verbe tout seul sur internet.
+# a sentence cut short: ask for the missing half instead of googling the verb on
+# its own.
 _TRUNCATED = {
     "ouvre": "Ouvrir quoi ?",
     "ouvrir": "Ouvrir quoi ?",
@@ -1568,22 +1563,22 @@ def _dispatch_command(cmd: str) -> None:
     if not c:
         speak("Je n'ai pas compris, tu peux répéter ?")
         return
-    # « salut ava », « merci ava » : on appelle son assistante par son nom en fin
-    # de phrase autant qu'en tete. sans ca, ces tournures ne ressemblaient a
-    # aucune commande connue et finissaient en recherche web.
+    # "salut ava", "merci ava": people call their assistant by name at the end of
+    # a sentence as often as at the start. without this, those phrasings matched
+    # no known command and ended up in a web search.
     if c in _CALLED_BY_NAME:
         speak("Oui ?")
         return
     c = _norm(strip_wake_suffix(c)) or c
-    # hesitations : ne rien chercher sur le web parce que Matheus a dit « euh ».
+    # hesitation: don't go searching the web because somebody said "euh".
     if c in _FILLERS:
         speak("Je t'écoute.")
         return
 
-    # Les capacités qui combinent plusieurs outils passent avant les verbes
-    # generiques : « ouvre mon agenda et dis-moi… » ne doit pas etre pris pour
-    # le nom d'une application, et « quel est ce probleme » declenche la vision.
-    # ecrire avant lire : « ajoute un rdv demain » contient aussi « demain ».
+    # capabilities that combine several tools come before the generic verbs:
+    # "ouvre mon agenda et dis-moi…" must not be taken for an application name,
+    # and "quel est ce probleme" triggers the screen vision.
+    # writing before reading: "ajoute un rdv demain" also contains "demain".
     if _is_calendar_create(c):
         _calendar_create(raw)
         return
@@ -1601,9 +1596,9 @@ def _dispatch_command(cmd: str) -> None:
         _research(raw, om_match=True)
         return
 
-    # computer use : seules les actions comprises par le parseur deterministe
-    # sont executees. envoyer, coller, fermer et cliquer sur un bouton sensible
-    # passent par une confirmation vocale separee.
+    # computer use: only the actions the deterministic parser recognises get run.
+    # sending, pasting, closing and clicking a sensitive button all go through a
+    # separate spoken confirmation.
     computer_candidate = parse_computer_intent(raw)
     pending_reply = (
         COMPUTER_USE.pending is not None
@@ -1621,34 +1616,34 @@ def _dispatch_command(cmd: str) -> None:
             speak(outcome.message or "Action terminée.")
         return
 
-    # refermer ce que le rituel a ouvert : le pendant de open_startup_apps.
+    # close what the ritual opened: the counterpart to open_startup_apps.
     if c in ("ferme tout", "ferme moi tout", "quitte tout", "range tout",
              "ferme mes applications", "ferme les applications"):
         closed = close_startup_apps()
         speak("Je ferme tout." if closed else "Il n'y a rien à fermer.")
         return
 
-    # ouvrir une app / un site ("votre"/"offre" = voxtral qui entend mal "ouvre")
+    # open an app or a site ("votre"/"offre" = voxtral mishearing "ouvre")
     for verb in ("ouvre moi ", "ouvre-moi ", "ouvre ", "ouvrir ", "lance ",
                  "lancer ", "demarre ", "affiche ", "votre ", "offre ",
                  "montre ", "va sur "):
         if c.startswith(verb):
             return _open_target(c.split(verb, 1)[1].strip())
 
-    # verbe dit sans complement : demander quoi, plutot que chercher le verbe
-    # tout seul sur le web (« ouvre » renvoyait des resultats sur le mot ouvre).
+    # a verb with no object: ask what, rather than searching the web for the verb
+    # on its own ("ouvre" returned results about the word ouvre).
     if c in _TRUNCATED:
         speak(_TRUNCATED[c])
         return
 
-    # mails
+    # mail
     if any(w in c for w in ("mail", "mails", "gmail", "courriel", "boite mail")):
         open_url("https://mail.google.com/mail/u/0/")
         speak("J'ouvre ta boite mail.")
         return
 
-    # recherche interne : Ava lit les resultats et montre les sources, sans
-    # sortir l'utilisateur vers un navigateur sauf clic volontaire.
+    # in-app search: Ava reads the results and shows her sources, without pushing
+    # the user out to a browser unless they click on purpose.
     search_match = re.match(
         r"^\s*(?:recherche(?:-moi| moi)?|cherche(?:-moi| moi)?|google)\s+(.+)$",
         raw, re.IGNORECASE,
@@ -1657,46 +1652,46 @@ def _dispatch_command(cmd: str) -> None:
         _research(search_match.group(1).strip())
         return
 
-    # heure qu'il est
+    # what time it is
     if _is_time_question(c):
         now = datetime.datetime.now()
         speak(f"Il est {now.hour} heures {now.minute:02d}.")
         return
 
-    # date du jour
+    # today's date
     if "quel jour" in c or "quelle date" in c:
         speak("Nous sommes le " + datetime.date.today().strftime("%d/%m/%Y") + ".")
         return
 
-    # meteo
+    # weather
     if "meteo" in c or "quel temps" in c or "il fait combien" in c:
         speak(weather_sentence() or "Météo indisponible pour le moment.")
         return
 
-    # actu ia. « quoi de neuf en IA » ne contenait aucun des mots attendus et
-    # partait en recherche web ; « ia » se cherche en mot entier, sinon il
-    # s'attrape dans « diaporama », « italie », « bavarois »...
+    # ai news. "quoi de neuf en IA" contained none of the expected words and went
+    # off to a web search; "ia" is matched as a whole word, or it gets caught
+    # inside "diaporama", "italie", "bavarois"…
     if ("intelligence artificielle" in c or "actu" in c or "nouveaute" in c
             or ("quoi de neuf" in c and not _is_calendar_summary(c))
             or re.search(r"\b(?:ia|ai)\b", c)):
         speak(ai_news_sentence() or "Rien de neuf côté intelligence artificielle.")
         return
 
-    # mots de transport dits tout seuls : « pause », « stop », « reprends ».
-    # avant, ils tombaient dans le filet de la recherche web et Ava partait
-    # chercher le mot « pause » sur internet.
+    # transport words said on their own: "pause", "stop", "reprends".
+    # they used to fall into the web search net and Ava went off to look up the
+    # word "pause" on the internet.
     if c in ("pause", "stop", "silence", "chut", "coupe", "coupe la musique", "stop la musique"):
         _spotify("pause"); speak("Je coupe."); return
     if c in ("play", "reprends", "reprend", "continue", "relance"):
         _spotify("play"); speak("Je reprends."); return
-    # « suivant » / « precedent » dits seuls : sans le mot « morceau », ils
-    # tombaient dans le filet et Ava cherchait « precedent » sur le web.
+    # "suivant" / "precedent" said alone: without the word "morceau" they fell
+    # into the net and Ava searched the web for "precedent".
     if c in ("suivant", "suivante", "next", "la suite", "passe", "zappe"):
         _spotify("next track"); speak("Morceau suivant."); return
     if c in ("precedent", "precedente", "previous", "retour", "reviens", "davant"):
         _spotify("previous track"); speak("Morceau précédent."); return
 
-    # controle spotify : morceau suivant / precedent / reprendre
+    # spotify transport: next track, previous track, resume
     if any(w in c for w in ("musique", "chanson", "morceau", "titre", "spotify", "son morceau")):
         if any(w in c for w in ("suivant", "suivante", "prochain", "prochaine", "next", "apres")):
             _spotify("next track"); speak("Morceau suivant."); return
@@ -1705,12 +1700,12 @@ def _dispatch_command(cmd: str) -> None:
         if any(w in c for w in ("reprend", "continue", "relance", "remets", "remet")):
             _spotify("play"); speak("Je reprends la musique."); return
 
-    # verrouiller l'ecran
+    # lock the screen
     if "verrouille" in c or "verrouiller" in c or ("lock" in c and "ecran" in c):
         _osascript('tell application "System Events" to keystroke "q" using {control down, command down}')
         speak("Je verrouille l'écran."); return
 
-    # capture d'ecran (avant la luminosite, sinon "ecran" est ambigu)
+    # screenshot (before brightness, or "ecran" is ambiguous)
     if "capture" in c or "screenshot" in c or "screen shot" in c:
         dest = str(Path.home() / "Desktop" /
                    ("capture-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".png"))
@@ -1733,7 +1728,7 @@ def _dispatch_command(cmd: str) -> None:
         if n is not None:
             _set_volume(n); speak(f"Volume a {max(0, min(100, n))} pour cent."); return
 
-    # luminosite (via les touches systeme ; peut ne pas marcher sur tous les macs)
+    # brightness (through the system keys; may not work on every mac)
     if "luminosite" in c or "lumiere" in c or ("ecran" in c and any(
             w in c for w in ("clair", "sombre", "lumineux", "fonce"))):
         up = any(w in c for w in ("monte", "augmente", "plus", "clair", "lumineux"))
@@ -1742,7 +1737,7 @@ def _dispatch_command(cmd: str) -> None:
             _osascript(f'tell application "System Events" to key code {code}')
         speak("Voila." if up else "C'est fait."); return
 
-    # minuteur
+    # timer
     if any(w in c for w in ("minuteur", "chrono", "timer")) or \
             ("dans" in c and any(w in c for w in ("rappelle", "reveille", "previens"))):
         secs, label = _parse_duration_s(c)
@@ -1751,7 +1746,7 @@ def _dispatch_command(cmd: str) -> None:
             speak(f"Minuteur lancé pour {label}."); return
         speak("Pour combien de temps ?"); return
 
-    # note rapide (ajoutee dans ~/Documents/ava-notes.md)
+    # a quick note (appended to ~/Documents/ava-notes.md)
     if re.search(r"\bnote", c) or "prends note" in c or "rappelle moi de" in c or "ajoute une note" in c:
         m = re.search(r"(?:noter?|note[rz]?|prends? note|rappelle[- ]?moi de|ajoute une note)"
                       r"\s+(?:que\s+|de\s+|d'\s*)?(.*)", raw, re.I)
@@ -1764,7 +1759,7 @@ def _dispatch_command(cmd: str) -> None:
             speak("C'est noté."); return
         speak("Qu'est-ce que je dois noter ?"); return
 
-    # musique (spotify) : jouer ton morceau favori ou mettre en pause
+    # music (spotify): play your favourite track, or pause
     if ("musique" in c or "chanson" in c or "spotify" in c
             or c.startswith("joue") or c.startswith("mets") or "play" in c):
         if any(w in c for w in ("pause", "arrete", "coupe", "stop", "eteins")):
@@ -1783,8 +1778,8 @@ def _dispatch_command(cmd: str) -> None:
         _research(raw)
         return
 
-    # discussion libre via LM Studio (ou tout serveur local compatible OpenAI).
-    # rien n'est envoye hors du Mac par defaut.
+    # open conversation through LM Studio (or any local openai-compatible server).
+    # nothing leaves the Mac by default.
     discussion_starters = (
         "discute avec moi de ", "parle moi de ", "explique moi ",
         "qu est ce que ", "qu'est ce que ", "que penses tu de ",
@@ -1800,28 +1795,28 @@ def _dispatch_command(cmd: str) -> None:
                 speak("Je n'arrive à joindre aucun moteur de discussion pour le moment.")
             return
 
-    # phrase sans verbe mais qui contient une app connue ("l'application discord",
-    # "votre discord"...) : on ouvre l'app plutot que de chercher sur le web.
-    # (place en dernier pour ne pas court-circuiter musique/mails/etc.)
+    # a sentence with no verb but carrying a known app ("l'application discord",
+    # "votre discord"…): open the app rather than searching the web.
+    # (last, so it doesn't short-circuit music, mail and the rest.)
     for token in c.replace("'", " ").split():
         if token in _APP_ALIASES:
             return _open_target(token)
 
-    # politesses et mots de remplissage : repondre court, surtout ne pas partir
-    # en recherche web parce que Matheus a dit « merci ».
+    # politeness and filler: answer briefly, and above all don't go off to a web
+    # search because somebody said "merci".
     courtesy = _small_talk(c)
     if courtesy:
         speak(courtesy)
         return
 
-    # dernier recours avant le filet : on demande a un petit modele ce que
-    # Matheus voulait dire. tout ce qui arrive ici allait de toute facon partir
-    # en recherche web, donc on ne ralentit aucune commande qui marchait deja.
+    # last resort before the net: ask a small model what was actually meant.
+    # everything reaching this point was going to end up in a web search anyway,
+    # so no command that already worked gets any slower.
     if _dispatch_understood(raw):
         return
 
-    # Conversation par defaut. Si aucun moteur ne repond, Ava effectue une
-    # recherche interne sourcee au lieu d'ouvrir un onglet opaque.
+    # conversation by default. If no engine answers, Ava runs a sourced in-app
+    # search instead of opening an opaque tab.
     answer = CONVERSATION.ask(raw)
     if answer.available:
         speak(answer.text)
@@ -1830,17 +1825,17 @@ def _dispatch_command(cmd: str) -> None:
 
 
 def _dispatch_understood(raw: str) -> bool:
-    """Execute l'intention devinee par le modele. False = on n'a rien compris.
+    """Run the intent the model guessed. False means we understood nothing.
 
-    Chaque branche reutilise exactement les actions du routage par mots-cles :
-    ce module decide *quoi* faire, jamais *comment*.
+    Every branch reuses exactly the same actions as the keyword routing: this
+    module decides *what* to do, never *how*.
     """
     installed = skills.discover() if SKILLS_ENABLED else []
     cached = INTENT_ROUTER.knows(raw)
     result = INTENT_ROUTER.understand(raw, skills.catalogue(installed))
     if not result.usable:
         return False
-    # une tournure deja apprise ne coute plus rien : ca se voit dans les traces.
+    # a phrasing already learned costs nothing now: you can see it in the traces.
     _mark_route("comprehension" if cached else "comprehension-reseau",
                 network=not cached)
     if result.intent == "competence":
@@ -1947,12 +1942,11 @@ def _dispatch_understood(raw: str) -> bool:
 
 
 def _run_skill(name: str, raw: str, installed: list) -> bool:
-    """Etapes « activation » et « execution » d'une competence.
+    """The activation and execution steps of a skill.
 
-    Deux facons pour une competence de repondre : un script qu'on lance et dont
-    on lit la sortie, ou — s'il n'y en a pas — ses instructions passees au
-    moteur de discussion. Dans les deux cas Ava dit ce qui remonte, elle
-    n'invente rien.
+    Two ways for a skill to answer: a script we run and whose output we read,
+    or — if there isn't one — its instructions handed to the conversation
+    engine. Either way Ava says what comes back; she invents nothing.
     """
     skill = skills.find(name, installed)
     if skill is None:
@@ -1971,7 +1965,7 @@ def _run_skill(name: str, raw: str, installed: list) -> bool:
         speak(output or f"La compétence {skill.name} n'a rien renvoyé.")
         return True
 
-    # pas de script : les instructions du SKILL.md servent de consigne.
+    # no script: the SKILL.md instructions become the brief.
     instructions = skill.instructions()
     if not instructions.strip():
         return False
@@ -2004,9 +1998,9 @@ def _spoken_duration(seconds: int) -> str:
     return " et ".join(parts) if parts else "quelques secondes"
 
 
-# --- boucle assistant : "ok ava ..." + commande ----------------------------
+# --- the assistant loop: "ok ava …" plus a command ---------------------------
 
-# --- transcription de la commande avec whisper (local, precis en francais) --
+# --- transcribing the command with whisper (local, accurate in french) -------
 WHISPER_SIZE = os.getenv("AVA_WHISPER_SIZE", "small").strip()  # small ou medium
 _whisper = None
 _whisper_lock = threading.Lock()
@@ -2036,7 +2030,7 @@ def get_vosk_model():
 
 
 class AdaptiveSpeechGate:
-    """VAD leger qui s'adapte au bruit de la piece avant chaque commande."""
+    """A light VAD that adapts to the room's noise before every command."""
 
     def __init__(self, silence_s: float = 0.68, min_speech_s: float = 0.18) -> None:
         self.silence_s = max(0.2, float(silence_s))
@@ -2056,7 +2050,7 @@ class AdaptiveSpeechGate:
         return min(0.028, max(0.0045, self.noise_floor * 1.55))
 
     def feed(self, rms: float, duration: float) -> bool:
-        """Ingere un niveau et renvoie ``True`` quand la phrase est terminee."""
+        """Take in one level, returning ``True`` when the utterance is over."""
         level = max(0.0, float(rms))
         block_s = max(0.0, float(duration))
         self.elapsed += block_s
@@ -2066,8 +2060,8 @@ class AdaptiveSpeechGate:
                 self.started = True
                 self.voiced += block_s
                 return False
-            # Le plancher suit lentement la ventilation et la musique, sans se
-            # laisser aspirer par un debut de mot bref.
+            # The floor follows the fans and the music slowly, without being
+            # dragged down by the brief start of a word.
             self.noise_floor = 0.94 * self.noise_floor + 0.06 * min(level, 0.04)
             return False
 
@@ -2098,7 +2092,7 @@ def _live_recognizer():
 
 def _record_utterance(max_s: float = 14.0, silence_s: float = 0.68,
                       start_timeout_s: float = 4.5) -> bytes:
-    """Capture une phrase sur une file dediee et publie un brouillon en direct."""
+    """Capture one utterance off a dedicated queue, publishing a live draft."""
     frames: list[bytes] = []
     preroll: deque[bytes] = deque(maxlen=36)  # 360 ms, protege la premiere syllabe
     gate = AdaptiveSpeechGate(silence_s=silence_s)
@@ -2152,10 +2146,10 @@ def _record_utterance(max_s: float = 14.0, silence_s: float = 0.68,
     return b"".join(frames)
 
 
-# --- voxtral (api mistral) : transcription principale si une cle est la ------
-# meme montage que le projet hackathon-mistral-vibe : wav multipart vers
-# /v1/audio/transcriptions, modele voxtral-mini-latest, et fallback local
-# (whisper) si pas de cle / pas de reseau / erreur. rien ne casse jamais.
+# --- voxtral (mistral api): the main transcription when a key is present -----
+# a wav goes multipart to /v1/audio/transcriptions, model voxtral-mini-latest,
+# with the local fallback (whisper) if there's no key, no network or an error.
+# nothing ever breaks.
 MISTRAL_KEY = os.getenv("MISTRAL_API_KEY", "").strip()
 VOXTRAL_MODEL = os.getenv("VOXTRAL_MODEL", "voxtral-mini-latest").strip()
 MISTRAL_BASE = os.getenv("MISTRAL_BASE_URL", "https://api.mistral.ai/v1").strip()
@@ -2174,7 +2168,7 @@ def _pcm_to_wav(pcm: bytes) -> bytes:
 
 
 def voxtral_transcribe(pcm: bytes):
-    # renvoie le texte, ou None si indisponible (le fallback whisper prend le relais)
+    # returns the text, or None if unavailable (the whisper fallback takes over)
     if not MISTRAL_KEY or not pcm:
         return None
     try:
@@ -2211,29 +2205,29 @@ def clean_transcript(text: str) -> str:
     wake = extract_wake(value, WAKE_PHRASES)
     if wake.detected:
         return wake.trailing_command.strip()
-    # meme si le reveil courant ne se fait que sur "ava" seul, on nettoie un
-    # eventuel "ok ava"/"bonjour ava" dit en tete de commande (une seule traite).
+    # even though the current wake rule only fires on "ava" alone, we clean off
+    # any "ok ava"/"bonjour ava" said at the head of a command (all one breath).
     stripped = strip_wake_prefix(value)
     if stripped is not None:
         return stripped
     return value
 
 
-# whisper large-v3-turbo compile pour le gpu du mac. mesures sur ce mac, meme
-# extrait de 11 s de francais :
+# whisper large-v3-turbo compiled for the mac's gpu. measured on this mac, same
+# 11 s clip of french:
 #
-#     faster-whisper small (cpu)   1,85 s   « Bonjour Mathieu, c'est **Hava** »
-#     voxtral (reseau)             ~1-2 s + la latence, et une cle qui s'epuise
-#     whisper-large-v3-turbo (mlx) **0,32 s**  « Mathieu, c'est **Ava** »
+#     faster-whisper small (cpu)   1.85 s   "Bonjour Mathieu, c'est **Hava**"
+#     voxtral (network)            ~1-2 s plus latency, and a key that runs out
+#     whisper-large-v3-turbo (mlx) **0.32 s**  "Mathieu, c'est **Ava**"
 #
-# le local n'est donc plus le repli degrade : il est a la fois le plus rapide et
-# le plus juste. une commande de 3,5 s se transcrit en 0,23 s, sans reseau.
+# so local is no longer the degraded fallback: it is both the fastest and the
+# most accurate. a 3.5 s command transcribes in 0.23 s, with no network at all.
 MLX_WHISPER_MODEL = os.getenv("AVA_STT_MODEL", "mlx-community/whisper-large-v3-turbo").strip()
 _mlx_whisper_ok = True
 
 
 def mlx_transcribe(pcm: bytes) -> str | None:
-    """Transcription locale sur le gpu. None si mlx n'est pas disponible."""
+    """Local transcription on the gpu. None if mlx isn't available."""
     global _mlx_whisper_ok
     if not _mlx_whisper_ok or not pcm:
         return None
@@ -2243,8 +2237,8 @@ def mlx_transcribe(pcm: bytes) -> str | None:
         result = mlx_whisper.transcribe(
             audio, path_or_hf_repo=MLX_WHISPER_MODEL, language="fr",
             condition_on_previous_text=False, temperature=0.0,
-            # oriente le decodage vers du vocabulaire de commande : sans ca,
-            # « ava » ressort en « hava », « à va », « ava ? »...
+            # steer decoding towards command vocabulary: without this, "ava"
+            # comes back as "hava", "à va", "ava ?"…
             initial_prompt="Commande vocale en français adressée à Ava, "
                            "assistante sur Mac : ouvre une application, mets la "
                            "musique, quelle heure est-il, la météo, mon agenda.",
@@ -2254,7 +2248,7 @@ def mlx_transcribe(pcm: bytes) -> str | None:
             print(f"[whisper-mlx] '{text}'")
         return text
     except ImportError:
-        # machine sans apple silicon : on ne reessaiera pas a chaque phrase.
+        # a machine without apple silicon: don't retry on every sentence.
         _mlx_whisper_ok = False
         return None
     except Exception as exc:  # noqa: BLE001
@@ -2266,19 +2260,19 @@ def mlx_transcribe(pcm: bytes) -> str | None:
 def transcribe(pcm: bytes) -> str:
     if not pcm:
         return ""
-    # 1) le gpu du mac : le plus rapide, le plus juste, et il ne depend de rien.
+    # 1) the mac's gpu: fastest, most accurate, and it depends on nothing.
     text = mlx_transcribe(pcm)
     if text:
         return clean_transcript(text)
-    # 2) voxtral, seulement si on l'a explicitement demande (il sort du mac).
+    # 2) voxtral, only if explicitly asked for (it leaves the mac).
     if os.getenv("AVA_USE_VOXTRAL") == "1":
         text = voxtral_transcribe(pcm)
         if text:
             return clean_transcript(text)
-    # 3) filet : whisper sur le cpu, si mlx n'existe pas sur cette machine.
+    # 3) safety net: whisper on the cpu, if mlx doesn't exist on this machine.
     audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-    # vad_filter enleve les silences/bruits (evite les hallucinations de whisper),
-    # initial_prompt oriente vers du vocabulaire de commande en francais.
+    # vad_filter strips silence and noise (which keeps whisper from
+    # hallucinating), initial_prompt steers towards french command vocabulary.
     segments, _ = get_whisper().transcribe(
         audio, language="fr", beam_size=5,
         vad_filter=True,
@@ -2347,8 +2341,8 @@ def _reserve_interaction() -> bool:
         return True
 
 
-# ce qui trahit une phrase adressee a ava : un verbe d'action, une question,
-# une politesse. une conversation de television n'en a aucun besoin.
+# what gives away a sentence aimed at ava: an action verb, a question, a bit of
+# politeness. a conversation on television needs none of those.
 _ADDRESSED_MARKERS = (
     "ouvre", "ouvrir", "lance", "ferme", "mets", "met ", "coupe", "monte",
     "baisse", "rappelle", "ajoute", "cherche", "dis moi", "explique", "montre",
@@ -2359,31 +2353,31 @@ _ADDRESSED_MARKERS = (
 
 
 def looks_ambient(text: str) -> bool:
-    """Est-ce un flot de paroles qui ne s'adressait pas a Ava ?
+    """Is this a stream of speech that wasn't aimed at Ava?
 
-    Releve dans les vrais journaux : un « salut ava » a ouvert l'ecoute pendant
-    qu'un match passait a la television, et Ava est partie chercher sur le web
-    « Thibaut Delphis et les Anéciens », puis a enchaine deux relances sur le
-    commentaire du match. Le micro entend la piece entiere ; le seul indice
-    disponible, c'est la **forme** de ce qui a ete transcrit.
+    Straight out of the real logs: a "salut ava" opened the mic while a match was
+    on television, and Ava went off to search the web for "Thibaut Delphis et
+    les Anéciens", then followed up twice more on the commentary. The mic hears
+    the whole room; the only clue available is the **shape** of what got
+    transcribed.
 
-    Une commande est courte et fait une seule phrase. Un commentaire sportif,
-    une reunion ou une radio arrivent en plusieurs phrases sans verbe d'action
-    ni question — c'est ce contraste qu'on lit ici, jamais le sujet.
+    A command is short and fits in one sentence. Sports commentary, a meeting or
+    the radio arrive as several sentences with no action verb and no question —
+    that contrast is what we read here, never the subject.
     """
     raw = str(text or "").strip()
     words = _norm(raw).split()
     sentences = [part for part in re.split(r"[.!?…]+", raw) if part.strip()]
-    # le nombre de phrases tranche avant la longueur : « Thibaut Delphis. Même
-    # s'il n'arrive plus a se relancer. Desormais, les Aneciens » ne fait que
-    # douze mots, et c'est pourtant du commentaire sportif pur.
+    # the number of sentences decides before the length does: "Thibaut Delphis.
+    # Même s'il n'arrive plus a se relancer. Desormais, les Aneciens" is only
+    # twelve words, and it's pure sports commentary all the same.
     if len(sentences) >= 3 and len(words) >= 8:
         return True
-    # ⚠️ un mot interrogatif ne suffit pas a prouver qu'on s'adresse a Ava : « ce
-    # que j'adore c'est **quand** on est dans la baignoire » vient d'une video
-    # qui passait dans la piece, et « quand » l'a fait passer pour une question.
-    # Au-dela de vingt-cinq mots en plusieurs phrases, c'est du recit, pas une
-    # demande — personne ne commande son assistante en quarante mots.
+    # ⚠️ a question word doesn't prove you're talking to Ava: "ce que j'adore
+    # c'est **quand** on est dans la baignoire" came from a video playing in the
+    # room, and "quand" made it look like a question. Past twenty-five words over
+    # several sentences it's a story, not a request — nobody commands their
+    # assistant in forty words.
     if len(words) > 25 and len(sentences) >= 2:
         return True
     if len(words) <= 12:            # une commande tient en une respiration
@@ -2401,7 +2395,7 @@ def _followup_should_stop(command: str) -> bool:
 
 
 def _run_continuous_conversation(command: str, *, display_initial: bool) -> None:
-    """Execute plusieurs tours sans redemander le wake word entre les reponses."""
+    """Run several turns without asking for the wake word between answers."""
     current = command.strip()
     show_user = display_initial
     for turn in range(MAX_CONTINUOUS_TURNS):
@@ -2416,9 +2410,9 @@ def _run_continuous_conversation(command: str, *, display_initial: bool) -> None
         if not CONTINUOUS_LISTENING or turn + 1 >= MAX_CONTINUOUS_TURNS:
             return
 
-        # L'audio d'Ava vient de se terminer : on purge sa voix et on ouvre
-        # directement une fenetre de suivi. Le silence ferme simplement la
-        # session ; il ne provoque pas une nouvelle reponse vocale.
+        # Ava's audio has just finished: flush her voice and open a follow-up
+        # window straight away. Silence simply closes the session; it doesn't
+        # trigger another spoken answer.
         _capture_audio.clear()
         _drain_command_queue()
         _drain_wake_queue()
@@ -2433,8 +2427,8 @@ def _run_continuous_conversation(command: str, *, display_initial: bool) -> None
         if len(followup) < 3:
             ui("transcript", "", False)
             return
-        # en suivi, aucun mot de reveil n'a ete dit : si ce qui arrive ressemble
-        # a la piece plutot qu'a une demande, on referme sans rien repondre.
+        # in a follow-up no wake word was said: if what comes in sounds like the
+        # room rather than a request, close without answering.
         if looks_ambient(followup):
             print(f"[ava] suivi {turn + 1} ignoré (ambiance) : '{followup[:60]}'")
             ui("transcript", "", False)
@@ -2455,17 +2449,17 @@ def handle_wake(prefilled_command: str = "", *, reserved: bool = False) -> None:
         if not command:
             command = transcribe(_record_utterance()).strip()
         if len(command) < 3:
-            # Deuxieme chance silencieuse : Ava ne parle plus par-dessus le debut
-            # de la commande et le micro reste immediatement disponible.
+            # A silent second chance: Ava no longer talks over the start of the
+            # command, and the mic stays immediately available.
             set_assistant_state(AvaState.LISTENING, "Je n'ai rien entendu — reessaie")
             command = transcribe(_record_utterance()).strip()
         print(f"[ava] commande : '{command}'")
         if len(command) < 3:
             speak("Je n'ai pas compris. Tu peux parler plus près du micro ou écrire ici.")
             return
-        # le mot de reveil a bien ete dit, mais ce qui a suivi peut venir de la
-        # piece (television, reunion). on le dit plutot que de partir chercher
-        # sur le web le nom d'un joueur de football entendu au passage.
+        # the wake word was said, but what followed may have come from the room
+        # (television, a meeting). say so, rather than going off to search the
+        # web for the name of a footballer overheard in passing.
         if looks_ambient(command):
             print(f"[ava] commande ignorée (ambiance) : '{command[:60]}'")
             speak("Je n'ai pas bien saisi, tu peux répéter ?")
@@ -2485,12 +2479,12 @@ def handle_wake(prefilled_command: str = "", *, reserved: bool = False) -> None:
 
 
 def submit_text_command(text: str) -> dict:
-    """Point d'entree non bloquant du champ texte et des boutons Oui / Non."""
+    """The non-blocking way in from the text field and the Oui / Non buttons."""
     command = str(text or "").strip()[:4000]
     if not command:
         return {"accepted": False, "error": "Écris une demande avant de l'envoyer."}
-    # « stop » pendant qu'elle parle veut dire « tais-toi », pas « lance une
-    # commande stop » : ca doit couper sans attendre la fin de la phrase.
+    # "stop" while she's talking means "be quiet", not "run a stop command": it
+    # has to cut in without waiting for the end of the sentence.
     if _norm(command) in _HUSH and stop_speaking():
         return {"accepted": True, "interrupted": True}
     if _norm(command) in {"bonjour ava", "bonsoir ava", "coucou ava"}:
@@ -2517,15 +2511,15 @@ def submit_text_command(text: str) -> dict:
     return {"accepted": True}
 
 
-# ce qu'on dit ou ecrit pour la faire taire, sans lui demander autre chose.
+# what you say or type to shut her up, without asking her for anything else.
 _HUSH = frozenset({"stop", "chut", "tais toi", "silence", "arrete", "arrete toi",
                    "ca suffit", "stop ava", "c est bon"})
 
 
 def start_voice_interaction() -> dict:
-    """Demarre l'ecoute depuis le bouton micro, sans exiger le wake word."""
-    # cliquer le micro pendant qu'elle parle, c'est vouloir la couper pour
-    # parler : on ne demande pas a l'utilisateur d'attendre la fin du briefing.
+    """Start listening from the mic button, with no wake word required."""
+    # clicking the mic while she's talking means you want to cut her off and
+    # speak: we don't ask anyone to wait out the end of a briefing.
     stop_speaking()
     if not _reserve_interaction():
         return {"accepted": False, "error": "Ava termine déjà une demande."}
@@ -2538,7 +2532,7 @@ def start_voice_interaction() -> dict:
     return {"accepted": True}
 
 
-# --- les gestes de la barre de menus ----------------------------------------
+# --- the menu bar gestures --------------------------------------------------
 
 def _menu_toggle_panel() -> None:
     if _overlay is None:
@@ -2547,7 +2541,7 @@ def _menu_toggle_panel() -> None:
 
 
 def _menu_listen() -> None:
-    # parler a ava depuis le menu suppose de la voir repondre.
+    # talking to ava from the menu implies watching her answer.
     if _overlay is not None and not _overlay.panel_visible():
         _overlay.set_panel_visible(True)
         MENU_BAR.set_panel_open(True)
@@ -2561,7 +2555,7 @@ def _menu_settings() -> None:
 
 
 def install_menu_bar() -> None:
-    """Installe l'icone de barre de menus une fois la fenetre prete."""
+    """Install the menu bar icon once the window is ready."""
     if MENU_BAR is None:
         return
     MENU_BAR.install({
@@ -2576,17 +2570,17 @@ def install_menu_bar() -> None:
     MENU_BAR.set_state(ASSISTANT_STATE.snapshot.state.value)
 
 
-# reveil beaucoup plus fiable : au lieu d'ecouter TOUT le francais (ou "bonjour ava"
-# se noie dans le vocabulaire), on contraint vosk a une petite grammaire = juste
-# les phrases de reveil + "[unk]" (qui absorbe le reste). le modele n'a plus qu'a
-# trancher entre "reveil ou pas" -> il se trompe beaucoup moins. reglable :
-# AVA_WAKE_GRAMMAR=0 pour revenir au vocabulaire complet.
+# a far more reliable wake-up: instead of listening to ALL of french (where
+# "bonjour ava" drowns in the vocabulary), we hold vosk to a small grammar — the
+# wake phrases plus "[unk]", which absorbs everything else. the model only has to
+# decide "wake or not", and it gets that wrong far less often. tunable with
+# AVA_WAKE_GRAMMAR=0 to go back to the full vocabulary.
 _WAKE_GRAMMAR = os.getenv("AVA_WAKE_GRAMMAR", "1").strip().lower() not in ("0", "false", "no", "off")
 
 
 def _wake_grammar(phrases) -> str:
-    # construit la liste des phrases autorisees a partir de la config + quelques
-    # variantes d'attaque courantes (ok/okay/hey/salut...), toujours suivies du nom.
+    # build the list of allowed phrases from the config, plus a few common
+    # openers (ok/okay/hey/salut…), always followed by the name.
     entries: list[str] = []
     seen = set()
 
@@ -2605,7 +2599,7 @@ def _wake_grammar(phrases) -> str:
         name = toks[-1]
         if len(toks) >= 2:
             prefixes.add(toks[0])
-        # on garde le nom seul reveillable et on decline les attaques usuelles.
+        # keep the bare name wakeable and decline the usual openers.
         add(name)
         for pfx in list(prefixes):
             add(f"{pfx} {name}")
@@ -2614,8 +2608,8 @@ def _wake_grammar(phrases) -> str:
 
 
 def _strip_unk(text: str) -> str:
-    # vosk en mode grammaire crache "[unk]" pour tout ce qui n'est pas une phrase
-    # de reveil : on l'enleve avant l'analyse (sinon il pollue la commande captee).
+    # in grammar mode vosk spits out "[unk]" for anything that isn't a wake
+    # phrase: strip it before parsing, or it pollutes the captured command.
     toks = [t for t in text.split() if t not in ("[unk]", "unk")]
     return " ".join(toks)
 
@@ -2651,9 +2645,10 @@ def assistant_loop() -> None:
     print('[ava] "bonjour ava" = grand reveil | "ava" = commande vocale')
     was_flow = False
     while True:
-        # pendant qu'ava ecoute/agit, on ne CONSOMME PAS la file : _record_utterance
-        # a besoin de TOUT l'audio de la commande. si on lit ici en meme temps,
-        # l'audio est partage entre les deux -> commande vide ou charabia.
+        # while ava is listening or acting we do NOT drain the queue:
+        # _record_utterance needs ALL of the command's audio. reading here at the
+        # same time splits the audio between the two -> an empty or garbled
+        # command.
         if _flow_active.is_set():
             was_flow = True
             time.sleep(0.05)
@@ -2687,12 +2682,12 @@ def assistant_loop() -> None:
             rec.Reset()
             partial_gate.reset()
             try:
-                # "bonjour ava" = le grand reveil du matin (comme le double clap).
-                # "ok ava" (et les autres) = mode commande.
-                # seul un vrai bonjour lance le grand rituel (musique + apps +
-                # briefing de 45 s). « salut ava » / « coucou ava » passent en
-                # mode commande : les declencher par erreur en pleine journee
-                # de travail etait bien trop couteux.
+                # "bonjour ava" = the big morning wake-up (like the double clap).
+                # "ok ava" (and the rest) = command mode.
+                # only a real "bonjour" starts the full ritual (music + apps +
+                # a 45 s briefing). "salut ava" and "coucou ava" go to command
+                # mode: setting those off by accident in the middle of a working
+                # day was far too expensive.
                 greeting = wake.phrase.split()[0] in ("bonjour", "bonsoir")
                 if greeting and not wake.trailing_command:
                     trigger_welcome("bonjour ava")
@@ -2705,7 +2700,7 @@ def assistant_loop() -> None:
                 rec.Reset()
 
 
-# --- detection du clap ------------------------------------------------------
+# --- clap detection ---------------------------------------------------------
 
 class ClapDetector:
     def __init__(self, warmup_s: float = 0.0):
@@ -2715,27 +2710,27 @@ class ClapDetector:
         self.peak_t = 0.0
         self.last_clap_t = 0.0
         self.last_clap_peak = 0.0
-        # petit echauffement : on laisse 3 s au plancher ambiant pour
-        # s'etalonner avant d'accepter un clap (si ava demarre musique allumee)
+        # a short warm-up: give the ambient floor 3 s to calibrate before we
+        # accept a clap (in case ava starts with the music already on)
         warmup = max(0.0, float(warmup_s))
         self.cooldown_until = time.monotonic() + warmup if warmup else 0.0
-        # bruit ambiant (moyenne glissante lente) : quand la musique joue, le
-        # plancher monte tout seul -> la batterie ne "clappe" plus a ta place.
-        # dans le silence il redescend -> tes claps restent faciles a passer.
+        # ambient noise (a slow moving average): when music plays the floor
+        # rises on its own -> the drums stop clapping on your behalf.
+        # in silence it comes back down -> your claps stay easy to land.
         self.ambient = 0.0
 
     def effective_floor(self) -> float:
         return max(MIN_RMS, self.ambient * 4.0)
 
     def register_clap(self, t: float, peak: float = 0.0) -> bool:
-        # renvoie True si c'est le 2e clap d'un double clap valide
+        # True if this is the second clap of a valid double clap
         if t < self.cooldown_until:
             return False
         gap = t - self.last_clap_t
         if self.last_clap_t and MIN_GAP_S <= gap <= MAX_GAP_S:
-            # deux mains qui claquent font deux coups d'amplitude voisine ;
-            # deux touches de clavier, non. ce garde-fou coupe la derniere
-            # famille de faux positifs qui passait le plancher.
+            # two hands clapping make two hits of similar amplitude; two
+            # keystrokes don't. this guard cuts out the last family of false
+            # positives that got past the floor.
             louder = max(peak, self.last_clap_peak)
             quieter = min(peak, self.last_clap_peak)
             if quieter > 0 and louder / quieter > CLAP_PEAK_RATIO:
@@ -2748,14 +2743,14 @@ class ClapDetector:
             self.last_clap_peak = 0.0
             self.cooldown_until = t + FLOW_COOLDOWN_S
             return True
-        # sinon : c'est (peut-etre) le 1er clap d'une nouvelle paire
+        # otherwise: this is (maybe) the first clap of a new pair
         self.last_clap_t = t
         self.last_clap_peak = peak
         return False
 
     def feed(self, t: float, rms: float) -> bool:
         double = False
-        # apprentissage du bruit ambiant hors des pics (constante ~2s)
+        # learn the ambient noise away from the peaks (time constant ~2 s)
         if not self.in_event and rms < 0.2:
             self.ambient = 0.995 * self.ambient + 0.005 * rms
         floor = self.effective_floor()
@@ -2774,7 +2769,7 @@ class ClapDetector:
                 self.peak_t = t
             elapsed = (t - self.peak_t) * 1000.0
             if rms < DECAY_RATIO * self.peak:
-                # le niveau s'est effondre : clap si c'est arrive vite
+                # the level collapsed: a clap, if it happened fast enough
                 if elapsed <= DECAY_MS and self.peak > floor:
                     if DEBUG:
                         print(f"[clap] pic={self.peak:.3f} chute en {elapsed:.0f}ms "
@@ -2787,7 +2782,7 @@ class ClapDetector:
                               f"(trop lent) -> ignore")
                 self.in_event = False
             elif elapsed > MAX_EVENT_MS:
-                # reste fort trop longtemps : voix ou musique
+                # stays loud too long: a voice, or music
                 if DEBUG:
                     print(f"[voix] pic={self.peak:.3f} soutenu >{MAX_EVENT_MS}ms -> ignore")
                 self.in_event = False
@@ -2809,8 +2804,8 @@ def pick_input_device():
 
 
 def run_audio() -> None:
-    # ouvre le micro et boucle : detection du clap + alimentation de vosk/whisper.
-    # tourne en tache de fond quand l'overlay occupe le thread principal.
+    # open the mic and loop: clap detection plus feeding vosk and whisper.
+    # runs in the background while the overlay holds the main thread.
     detector = ClapDetector(warmup_s=3.0)
     q: deque = deque(maxlen=2000)
     device = pick_input_device()
@@ -2821,9 +2816,8 @@ def run_audio() -> None:
             print(f"[audio] {status}")
         mono = indata[:, 0]
         rms = float(np.sqrt(np.mean(np.square(mono))))
-        # on continue d'empiler les niveaux meme en pause : le chien de garde
-        # s'en sert pour savoir si le flux est vivant. seule la reconnaissance
-        # est coupee.
+        # we keep stacking levels even while paused: the watchdog uses them to
+        # tell whether the stream is alive. only recognition is switched off.
         q.append((time.monotonic(), rms))
         if not _listening_paused.is_set():
             push_wake_audio(mono, state["rate"])
@@ -2851,8 +2845,8 @@ def run_audio() -> None:
               "reglages > confidentialite.")
         return
 
-    # chien de garde : si le flux coreaudio meurt en silence (err -50 & co),
-    # plus aucun bloc n'arrive -> on rouvre le micro automatiquement.
+    # watchdog: if the coreaudio stream dies quietly (err -50 and friends) no
+    # more blocks arrive -> reopen the mic automatically.
     last_audio = time.monotonic()
     last_level_push = 0.0
     level_was_active = False
@@ -2877,8 +2871,8 @@ def run_audio() -> None:
             if t - last_level_push >= 0.075:
                 listening = ASSISTANT_STATE.snapshot.state == AvaState.LISTENING
                 if listening:
-                    # Courbe douce : la voix normale occupe l'essentiel de 0..1,
-                    # sans faire trembler l'orbe avec le simple bruit de fond.
+                    # A gentle curve: a normal voice takes up most of 0..1,
+                    # without making the orb shiver at plain background noise.
                     ui("level", max(0.0, min(1.0, (rms - 0.004) * 24.0)))
                     level_was_active = True
                 elif level_was_active:
@@ -2909,23 +2903,23 @@ def main() -> None:
           'ou dis "bonjour ava". (ctrl+c pour arreter)')
     if DEBUG:
         print("[debug] active : niveaux et decisions affiches a chaque pic")
-    # le modele de voix local met ~20 s a se charger : on s'en occupe tout de
-    # suite pour que le premier "bonjour ava" n'attende pas.
+    # the local voice model takes ~20 s to load: we get on with it right away so
+    # the first "bonjour ava" doesn't have to wait.
     print(f"[info] voix : moteur {voice_tts.engine_name()}")
     voice_tts.prewarm()
-    # on prepare le briefing du matin des le demarrage pour qu'il parte
-    # instantanement au premier clap (agenda + meteo + actu ia + citation)
+    # the morning briefing is prepared at startup so it can start instantly on
+    # the first clap (calendar + weather + ai news + quote)
     print("[info] preparation du briefing du matin (agenda, meteo, actu ia, citation)...")
     threading.Thread(target=get_welcome, daemon=True).start()
     threading.Thread(target=keep_welcome_warm, daemon=True).start()
 
-    # assistant vocal "ok ava ..." en parallele du clap
+    # the "ok ava …" voice assistant, alongside the clap
     threading.Thread(target=assistant_loop, daemon=True).start()
 
-    # `AVA_GREET=1` joue le rituel du matin au lancement. sans ca, la seule
-    # facon de le revoir etait d'attendre le lendemain (il ne se joue qu'une
-    # fois par jour) ou de dire « bonjour ava » devant le micro — impraticable
-    # des qu'on veut verifier une modification du briefing.
+    # `AVA_GREET=1` plays the morning ritual at launch. without it, the only way
+    # to see it again was to wait for tomorrow (it only runs once a day) or to
+    # say "bonjour ava" into the mic — impractical the moment you want to check a
+    # change to the briefing.
     if os.getenv("AVA_GREET") == "1":
         def greet_at_launch() -> None:
             time.sleep(2.0)             # laisse l'overlay et la voix se poser
@@ -2933,7 +2927,7 @@ def main() -> None:
 
         threading.Thread(target=greet_at_launch, daemon=True,
                          name="ava-greet-at-launch").start()
-    # on precharge whisper en fond pour que la 1re commande soit rapide
+    # preload whisper in the background so the first command is quick
     if WAKE_ENABLED:
         threading.Thread(target=get_whisper, daemon=True).start()
 
@@ -2945,8 +2939,8 @@ def main() -> None:
         ).start()
 
     if OVERLAY_ENABLED and _overlay is not None:
-        # l'overlay DOIT tourner sur le thread principal (macos) : l'audio passe
-        # en fond, et on lance la fenetre orbe ici (bloquant jusqu'a fermeture).
+        # the overlay MUST run on the main thread (macos): the audio goes to the
+        # background and we start the orb window here (blocking until it closes).
         _overlay.set_handlers(submit_text_command, start_voice_interaction,
                               install_menu_bar)
         if SETTINGS.get("ui", {}).get("startup_animation", True):
@@ -2963,15 +2957,15 @@ def main() -> None:
         threading.Thread(target=run_audio, daemon=True).start()
         try:
             _overlay.start(str(paths.OVERLAY_HTML))
-            # la fenetre s'est fermee (bug gui, etc.) : ava ne doit PAS mourir
-            # pour autant — l'ecoute continue sans interface.
+            # the window closed (a gui bug, whatever): ava must NOT die with it —
+            # listening carries on without an interface.
             print("[overlay] fenetre fermee -> ava continue sans interface")
         except Exception as exc:  # noqa: BLE001
             print(f"[overlay] indisponible ({exc}) -> mode sans interface")
             if DEBUG:
                 import traceback
                 traceback.print_exc()
-        # dans tous les cas : on garde le process (et donc l'ecoute) en vie
+        # either way: keep the process (and so the listening) alive
         try:
             while True:
                 time.sleep(1)
