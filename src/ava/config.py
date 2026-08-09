@@ -328,18 +328,13 @@ class ConfigStore:
     def update(self, patch: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
             normalized = normalize_config(_merge(self._data, patch))
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-            with tmp.open("w", encoding="utf-8") as handle:
-                json.dump(normalized, handle, ensure_ascii=False, indent=2)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            # le fichier porte le secret du client oauth google : il ne doit
-            # jamais redevenir lisible par tout le monde. sans ce chmod, chaque
-            # enregistrement depuis le panneau de reglages remettait 644.
-            os.chmod(tmp, 0o600)
-            os.replace(tmp, self.path)
+            # this file carries the google oauth client secret, so it must never
+            # go back to being world-readable. saving from the settings panel
+            # used to rewrite it as 644 every single time.
+            paths.write_private(
+                self.path,
+                json.dumps(normalized, ensure_ascii=False, indent=2) + "\n",
+            )
             self._data = normalized
             listeners = tuple(self._listeners)
             snapshot = deepcopy(normalized)

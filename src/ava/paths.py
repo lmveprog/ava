@@ -28,6 +28,28 @@ USER_SKILLS_DIR = Path.home() / "Documents" / "ava-skills"
 _CACHE_DIR = HOME / ".cache"
 
 
+def write_private(path: Path, text: str) -> None:
+    """Write a secret to disk atomically, and never world-readable.
+
+    The old shape was write-then-chmod, which leaves the file at whatever the
+    umask says for a moment — long enough to matter for a refresh token. Here
+    the 0600 is part of the create, and the rename is atomic so a crash never
+    leaves half a token behind.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    descriptor = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    os.replace(tmp, path)
+
+
 def cache_dir(*parts: str) -> Path:
     """A cache folder that only the current user can read.
 

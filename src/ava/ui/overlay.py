@@ -528,13 +528,18 @@ def message(role: str, text: str, illustration: str = "", delays=None) -> None:
 
 
 def sources(items) -> None:
+    # these urls come off the open web and end up as the href of a chip in the
+    # panel. anything that isn't plain http(s) — javascript:, file:, data: —
+    # is dropped here rather than trusted to the click handler downstream.
     safe = []
     for item in list(items or [])[:5]:
-        if isinstance(item, dict):
-            safe.append({
-                "title": str(item.get("title", ""))[:160],
-                "url": str(item.get("url", ""))[:1200],
-            })
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url", ""))[:1200]
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            continue
+        safe.append({"title": str(item.get("title", ""))[:160], "url": url})
     _eval(f"window.avaSources && avaSources({_j(safe)})")
 
 

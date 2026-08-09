@@ -128,11 +128,9 @@ class GoogleAuth:
             return {}
 
     def _write(self, data: dict) -> None:
-        self.token_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.token_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        os.chmod(tmp, 0o600)          # un refresh token vaut un mot de passe
-        tmp.replace(self.token_path)
+        # a refresh token is worth a password: 0600 from the moment the file
+        # exists, never a chmod after the fact.
+        paths.write_private(self.token_path, json.dumps(data, indent=2))
 
     def status(self) -> dict:
         client_id, _ = self.credentials()
