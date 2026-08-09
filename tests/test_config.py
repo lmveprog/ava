@@ -72,7 +72,7 @@ class AdversarialInputTests(unittest.TestCase):
     """Trouve en fuzzant le pont des reglages depuis l'overlay."""
 
     def test_nan_falls_back_instead_of_becoming_the_maximum(self):
-        # min(1.2, nan) rend 1.2 : un nan devenait silencieusement le maximum.
+        # min(1.2, nan) gives 1.2: a nan silently became the maximum.
         clean = normalize_config({"voice": {"temperature": float("nan")}})
         self.assertEqual(clean["voice"]["temperature"], 0.65)
 

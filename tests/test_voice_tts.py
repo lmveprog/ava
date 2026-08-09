@@ -14,7 +14,7 @@ from ava.audio import voice_tts as V  # noqa: E402
 
 class EngineChoiceTests(unittest.TestCase):
     def test_default_engine_is_the_local_one(self):
-        """Le defaut est local : ava parle sans reseau, sans quota, sans compte."""
+        """The default is local: ava speaks with no network, no quota, no account."""
         with patch.object(V, "_settings", return_value={}):
             self.assertEqual(V.engine_name(), "chatterbox")
 
@@ -22,9 +22,9 @@ class EngineChoiceTests(unittest.TestCase):
         with patch.object(V, "_settings", return_value={"engine": "siri"}):
             self.assertEqual(V.engine_name(), "chatterbox")
 
-    def test_kokoro_ne_retombe_sur_aucun_autre(self):
-        """Un seul chemin : si kokoro ne rend rien, on passe a `say`, pas a un
-        troisieme moteur au timbre different."""
+    def test_kokoro_falls_back_to_nothing_else(self):
+        """One path only: if kokoro gives nothing we go to `say`, not to some
+        third engine with a different timbre."""
         with patch.object(V, "_settings", return_value={"engine": "kokoro"}), \
                 patch.object(V, "_kokoro_audio", return_value=None) as local, \
                 patch.object(V, "_mistral_audio") as distant, \
@@ -48,10 +48,10 @@ class EngineChoiceTests(unittest.TestCase):
         remote.assert_called_once()
         local.assert_called_once()
 
-    def test_le_moteur_choisi_ne_saute_pas_sur_un_autre_timbre(self):
-        """Une phrase ratee sortait avec une **autre voix**, et on croyait a un
-        bug du timbre alors que c'etait un repli. Le moteur choisi est le
-        moteur entendu ; si rien ne sort, `say` prend le relais."""
+    def test_the_chosen_engine_never_jumps_to_another_timbre(self):
+        """A fumbled sentence came out in a **different voice**, and it looked
+        like a bug in the timbre when it was a fallback. The engine you choose
+        is the engine you hear; if nothing comes out, `say` takes over."""
         with patch.object(V, "_settings", return_value={"engine": "chatterbox"}), \
                 patch.object(V, "_chatterbox_audio", return_value=None) as local, \
                 patch.object(V, "_mistral_audio") as distant, \
@@ -78,7 +78,7 @@ class EngineChoiceTests(unittest.TestCase):
         load.assert_not_called()
 
     def test_prewarm_on_mistral_skips_the_local_model_entirely(self):
-        """Le gros gain au demarrage : plus de 7,5 s de chargement gpu pour rien."""
+        """The big win at startup: no more 7.5 s of gpu loading for nothing."""
         with patch.object(V, "_settings", return_value={"engine": "mistral"}), \
                 patch.object(V, "prune_cache"), \
                 patch.object(V, "synthesize") as synth, \
@@ -90,7 +90,7 @@ class EngineChoiceTests(unittest.TestCase):
 
 
 class MoodTests(unittest.TestCase):
-    """La voix prend la couleur de ce qu'elle dit — mais sobrement."""
+    """The voice takes on the colour of what it says — but soberly."""
 
     def test_a_greeting_sounds_happy(self):
         self.assertEqual(V.mood_for("Bonjour Mathieu, on est samedi."), "happy")
@@ -119,7 +119,7 @@ class MoodTests(unittest.TestCase):
 
 
 class SpeechUnitTests(unittest.TestCase):
-    """Le decoupage qui permet d'envoyer les phrases en parallele."""
+    """The split that lets the sentences go out in parallel."""
 
     def test_sentences_are_not_regrouped(self):
         units = V.split_speech_units(
@@ -128,7 +128,7 @@ class SpeechUnitTests(unittest.TestCase):
         self.assertEqual(len(units), 3)
 
     def test_a_tiny_fragment_is_glued_to_the_previous_one(self):
-        # « Voilà. » ne vaut pas son propre aller-retour reseau.
+        # "Voilà." isn't worth its own network round trip.
         units = V.split_speech_units(
             "Ton agenda du jour tient en une seule ligne cette fois-ci. Voilà.")
         self.assertEqual(len(units), 1)
@@ -139,7 +139,7 @@ class SpeechUnitTests(unittest.TestCase):
 
 
 class LazyImportRaceTests(unittest.TestCase):
-    """transformers n'aime pas etre importe depuis deux threads a la fois."""
+    """transformers dislikes being imported from two threads at once."""
 
     def test_a_transient_import_error_is_retried(self):
         calls = {"n": 0}
@@ -196,8 +196,8 @@ class ChunkingTests(unittest.TestCase):
 
 
 class GenerationGuardTests(unittest.TestCase):
-    """Chatterbox part en roue libre sur les textes courts : « Oui ? » a donne
-    3,3 s de babillage la ou on en attend 0,9."""
+    """Chatterbox free-wheels on short text: "Oui ?" produced 3.3 s of
+    babbling where 0.9 was expected."""
 
     def test_expected_duration_grows_with_the_words(self):
         short = V.expected_seconds("Oui ?")
@@ -231,7 +231,7 @@ class GenerationGuardTests(unittest.TestCase):
 
 
 class CacheHousekeepingTests(unittest.TestCase):
-    """Un fichier par phrase jamais redite : sans menage, ca finit en gigaoctets."""
+    """One file per sentence never repeated: without a sweep it ends in gigabytes."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -280,7 +280,7 @@ class CacheHousekeepingTests(unittest.TestCase):
 
 
 class RetryBudgetTests(unittest.TestCase):
-    """Le garde-fou anti-derive ne doit pas tripler la latence pour rien."""
+    """The anti-drift guard must not triple the latency for nothing."""
 
     def test_short_lines_get_a_wide_window(self):
         low, high = V.acceptable_ratio("Oui ?")
@@ -293,7 +293,7 @@ class RetryBudgetTests(unittest.TestCase):
         self.assertLessEqual(high, 1.8)
 
     def test_a_runaway_short_line_is_still_caught(self):
-        # « Oui ? » a 3,28 s pour 0,9 attendu = x3,6 : au-dela de la fenetre.
+        # "Oui ?" at 3.28 s against an expected 0.9 = x3.6, outside the window.
         low, high = V.acceptable_ratio("Oui ?")
         self.assertGreater(3.28 / V.expected_seconds("Oui ?"), high)
 
@@ -313,9 +313,10 @@ class ToolPathTests(unittest.TestCase):
         self.addCleanup(V._tools.clear)
 
     def test_a_homebrew_tool_is_found_without_it_being_on_the_path(self):
-        # sans ça, ffmpeg était introuvable une fois ava démarrée automatiquement,
-        # le recollage échouait en silence et TOUT briefing de plus d'une phrase
-        # devenait muet — alors que tout marchait lancé depuis un terminal.
+        # without this, ffmpeg was nowhere to be found once ava started
+        # automatically, the concat failed silently and EVERY briefing longer
+        # than one sentence went mute — while everything worked when she was
+        # started from a terminal.
         with patch("shutil.which", return_value=None), \
                 patch.object(Path, "is_file", return_value=True), \
                 patch("os.access", return_value=True):

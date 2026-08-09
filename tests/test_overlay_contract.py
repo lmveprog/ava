@@ -63,8 +63,8 @@ class OverlayContractTests(unittest.TestCase):
         )
 
     def test_orb_is_a_local_fluid_canvas_with_offline_fallback(self):
-        # l'orbe du topbar est un canvas fluide local (meme rendu que l'accueil),
-        # avec le fallback css. plus de mascotte Rive distante -> marche hors-ligne.
+        # the topbar orb is a local fluid canvas (same look as the startup
+        # screen), with the css fallback. no remote mascot -> works offline.
         self.assertIn("fallback-orb", self.source)
         self.assertIn("function initAvatarOrb", self.source)
         self.assertNotIn("rive.app", self.source)
@@ -75,24 +75,24 @@ if __name__ == "__main__":
 
 
 class OrbGeometryTests(unittest.TestCase):
-    """L'orbe se faisait trancher au carre par le bord de son canvas."""
+    """The orb was getting sliced square by the edge of its canvas."""
 
     def setUp(self):
         self.html = (Path(__file__).resolve().parents[1] / "src" / "ava" / "ui" / "web" / "ava.html").read_text(encoding="utf-8")
 
     def test_the_startup_orb_scales_with_its_canvas(self):
-        # l'echelle doit venir du canvas, plus de rayons en pixels durs.
+        # the scale has to come from the canvas, no more hard pixel radii.
         self.assertIn("const k=Math.min(w,h)/2/120", self.html)
         self.assertIn("fluidPath(cx,cy,79*k,t,amplitude)", self.html)
         self.assertNotIn("fluidPath(cx,cy,79,t,amplitude)", self.html)
 
     def test_the_halo_never_reaches_the_canvas_edge(self):
         # forme (79 + 7.2 d'ondulation) + flou (34) = 120.2 unites, sur 125
-        # disponibles : il reste toujours de la marge avant le bord.
+        # available: there is always headroom before the edge.
         self.assertLessEqual((79 + 7.2 + 34) / 120, 1.005)
 
     def test_the_orb_box_reserves_the_room_for_its_halo(self):
-        # le noyau porte le halo en inset:0, donc la mise en page en tient compte
+        # the core carries the halo at inset:0, so the layout accounts for it
         self.assertIn(".startup-orb-core{position:relative;width:min(212px,100%)", self.html)
         self.assertIn(".startup-orb-core::before{content:\"\";position:absolute;inset:0", self.html)
         self.assertNotIn("width:230px;height:230px", self.html)
@@ -102,7 +102,7 @@ class OrbGeometryTests(unittest.TestCase):
 
 
 class VoicePreviewTests(unittest.TestCase):
-    """Bouton « écouter un extrait » : il ne doit jamais figer le panneau."""
+    """The "play a sample" button must never freeze the panel."""
 
     def test_it_returns_before_the_synthesis_finishes(self):
         started = []

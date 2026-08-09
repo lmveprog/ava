@@ -1,4 +1,4 @@
-"""les citations : attribuées, et pas deux fois la même de suite."""
+"""the quotes: attributed, and never the same one twice in a row."""
 
 import sys
 import tempfile
@@ -22,7 +22,7 @@ class FondsTests(unittest.TestCase):
         self.assertEqual(len(texts), len(set(texts)))
 
     def test_the_accents_are_there(self):
-        """Exigence de Matheus : la synthèse écorche les mots sans accent."""
+        """A hard requirement: synthesis mangles words with their accents missing."""
         suspects = [q.text for q in quotes.QUOTES
                     if " a " in f" {q.text} " and "à" not in q.text and "é" not in q.text]
         self.assertEqual(suspects, [])
@@ -58,7 +58,7 @@ class RotationTests(unittest.TestCase):
 
 
 class QuoteOfTheDayTests(unittest.TestCase):
-    """« La citation du jour » doit être la même toute la journée."""
+    """The "quote of the day" has to be the same one all day."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -71,8 +71,8 @@ class QuoteOfTheDayTests(unittest.TestCase):
         self.addCleanup(quotes._today.update, day=None, quote=None)
 
     def test_it_does_not_change_between_two_calls(self):
-        # le briefing est refabriqué toutes les 15 min : sans ça, la « citation
-        # du jour » changeait quatre fois par heure.
+        # the briefing is rebuilt every 15 min: without this the "quote of the
+        # day" changed four times an hour.
         self.assertEqual(quotes.of_the_day("2026-08-08").text,
                          quotes.of_the_day("2026-08-08").text)
 

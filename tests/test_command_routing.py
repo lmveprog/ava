@@ -64,7 +64,7 @@ class CommandRoutingTests(unittest.TestCase):
         self.assertTrue(text.endswith("Bon travail !"))
 
     def test_the_briefing_leads_with_the_agenda_not_the_weather(self):
-        """L'ordre n'est pas décoratif : ce qui engage la journée passe devant."""
+        """The order isn't decorative: whatever commits the day goes first."""
         with patch.object(jarvis, "calendar_sentence", return_value="AGENDA."), \
                 patch.object(jarvis, "weather_sentence", return_value="METEO."), \
                 patch.object(jarvis, "ai_news_sentence", return_value="ACTU."), \
@@ -74,7 +74,7 @@ class CommandRoutingTests(unittest.TestCase):
         self.assertLess(text.index("METEO."), text.index("ACTU."))
 
     def test_the_briefing_no_longer_opens_on_filler(self):
-        # « C'est Ava, j'espère que tu vas bien ! » revenait mot pour mot chaque matin.
+        # "C'est Ava, j'espère que tu vas bien !" came back word for word every morning.
         with patch.object(jarvis, "calendar_sentence", return_value=""), \
                 patch.object(jarvis, "weather_sentence", return_value=""), \
                 patch.object(jarvis, "ai_news_sentence", return_value=""), \
@@ -88,7 +88,7 @@ class CommandRoutingTests(unittest.TestCase):
                 patch.object(jarvis, "ai_news_sentence", return_value=""), \
                 patch.object(jarvis.promethee, "active_session", return_value=None):
             text = jarvis.build_welcome_text()
-        # l'amorce tourne avec le jour ; ce qui ne bouge pas, c'est l'auteur.
+        # the opener rotates with the day; what doesn't move is the author.
         self.assertIn(jarvis.quotes.of_the_day().author, text)
 
     def test_it_says_bonsoir_in_the_evening(self):
@@ -96,7 +96,7 @@ class CommandRoutingTests(unittest.TestCase):
         self.assertEqual(jarvis.greeting_word(dt.datetime(2026, 8, 8, 20, 0)), "Bonsoir")
 
     def test_a_missing_news_item_is_skipped_rather_than_announced(self):
-        # avant : « l'actualité est indisponible pour le moment », dit à voix haute.
+        # before: "l'actualité est indisponible pour le moment", said out loud.
         with patch.object(jarvis, "ai_news_item", return_value={}):
             self.assertEqual(jarvis.ai_news_sentence(), "")
 
@@ -118,9 +118,9 @@ class CommandRoutingTests(unittest.TestCase):
         self.assertIn("tourne déjà", text)
         self.assertNotIn("Je te lance une session", text)
 
-    def test_l_espace_se_monte_pendant_qu_elle_parle(self):
+    def test_the_workspace_goes_up_while_she_talks(self):
         previous_apps = jarvis.APPS
-        # (nom, place, adresse) : une app peut s'ouvrir sur une page precise.
+        # (name, slot, url): an app can be opened on a specific page.
         jarvis.APPS = [("Notion", "tr", ""), ("Dia", "tl", "https://x.com")]
         events = []
 
@@ -147,10 +147,11 @@ class CommandRoutingTests(unittest.TestCase):
             jarvis.APPS = previous_apps
 
         self.assertLess(events.index("ui:startup"), events.index("speech"))
-        # l'espace de travail part **avant** la parole, pas apres : les fenetres
-        # se rangent pendant le briefing au lieu de le suivre dans le silence.
+        # the workspace goes up **before** the speech, not after: the windows
+        # arrange themselves during the briefing instead of following it in
+        # silence.
         self.assertLess(events.index("espace"), events.index("speech"))
-        # la scene ne se referme qu'une fois la parole finie.
+        # the scene only closes once the speaking is over.
         self.assertLess(events.index("speech"), events.index("ui:finish_startup"))
 
     def test_typed_bonjour_ava_starts_the_same_ritual(self):
@@ -223,7 +224,7 @@ class CommandRoutingTests(unittest.TestCase):
         self.assertIn("réglages", speak.call_args.args[0])
 
     def test_event_titles_are_cleaned_before_being_spoken(self):
-        # les titres de l'agenda sont bourres d'emojis : la voix s'y casse les dents.
+        # calendar titles are stuffed with emoji, and the voice breaks its teeth on them.
         self.assertEqual(jarvis.spoken_title("💻 Exo code #1 — chronométré"),
                          "Exo code numéro 1 — chronométré")
         self.assertEqual(jarvis.spoken_title("🍽️ Déjeuner"), "Déjeuner")
@@ -302,10 +303,10 @@ if __name__ == "__main__":
 
 
 class BriefingFreshnessTests(unittest.TestCase):
-    """La scene de demarrage restait figee ~1 min quand le briefing changeait."""
+    """The startup scene froze for about a minute when the briefing changed."""
 
     def test_the_scene_shows_exactly_what_ava_will_say(self):
-        # le transcript doit venir du texte deja synthetise, pas d'un recalcul
+        # the transcript must come from the text already synthesised, not a recompute
         # qui pourrait differer (agenda ou heure ayant bouge entre-temps).
         with patch.object(jarvis, "build_welcome_text") as rebuild, \
                 patch.object(jarvis, "weather_info", return_value=None), \
@@ -342,7 +343,7 @@ class BriefingFreshnessTests(unittest.TestCase):
 
 
 class RobustnessTests(unittest.TestCase):
-    """Aucune commande ne doit pouvoir tuer l'interaction en silence."""
+    """No command may be able to kill the interaction quietly."""
 
     def test_a_crash_downstream_still_gets_an_answer(self):
         with patch.object(jarvis, "_dispatch_command", side_effect=RuntimeError("boum")), \
@@ -388,7 +389,7 @@ class RobustnessTests(unittest.TestCase):
 
 
 class TimeQuestionTests(unittest.TestCase):
-    """« heure » apparait dans bien plus de phrases qu'on ne croit."""
+    """\"heure\" shows up in far more sentences than you'd think."""
 
     def ask(self, text):
         return jarvis._is_time_question(jarvis._norm(text))
@@ -399,7 +400,7 @@ class TimeQuestionTests(unittest.TestCase):
             self.assertTrue(self.ask(phrase), phrase)
 
     def test_a_duration_is_not_a_time_question(self):
-        # ce cas repondait « il est 18 heures 49 » au lieu de lancer le minuteur.
+        # this case answered "il est 18 heures 49" instead of starting the timer.
         for phrase in ("rappelle-moi dans un quart d'heure",
                        "minuteur de deux heures",
                        "dans une heure préviens-moi",

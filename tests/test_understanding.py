@@ -1,4 +1,4 @@
-"""le routeur d'intentions ne doit jamais faire confiance a ce que rend le modele."""
+"""the intent router must never trust what the model hands back."""
 
 import sys
 import tempfile
@@ -22,7 +22,7 @@ class ParsingTests(unittest.TestCase):
         self.assertTrue(result.usable)
 
     def test_an_invented_intent_is_refused(self):
-        # le modele n'a pas le droit de promettre une action qui n'existe pas.
+        # the model isn't allowed to promise an action that doesn't exist.
         result = U.parse_understanding(
             '{"intent":"commander_pizza","cible":"4 fromages","confiance":0.99}')
         self.assertEqual(result.intent, "inconnu")
@@ -56,7 +56,7 @@ class ParsingTests(unittest.TestCase):
 
 
 class ThresholdTests(unittest.TestCase):
-    """Une erreur sur « verrouiller » coute bien plus cher qu'un morceau saute."""
+    """Getting "verrouiller" wrong costs far more than a skipped track."""
 
     def test_a_disruptive_action_needs_real_certainty(self):
         tepid = U.Understanding("verrouiller", confidence=0.7)
@@ -70,7 +70,7 @@ class ThresholdTests(unittest.TestCase):
 
 class RouterTests(unittest.TestCase):
     def setUp(self):
-        # jamais contre le cache reel : on ne veut ni le polluer ni en dependre.
+        # never against the real cache: we neither pollute nor depend on it.
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.router = U.IntentRouter(cache_path=Path(self.tmp.name) / "intents.json")
@@ -90,7 +90,7 @@ class RouterTests(unittest.TestCase):
         classify.assert_called_once()
 
     def test_a_network_failure_opens_the_breaker(self):
-        # sinon chaque commande suivante paierait le timeout complet.
+        # otherwise every command after would pay the full timeout.
         with patch.dict("os.environ", {"MISTRAL_API_KEY": "x"}, clear=False), \
                 patch.object(self.router, "_classify", side_effect=OSError("réseau")):
             self.assertFalse(self.router.understand("baisse le son").usable)
@@ -104,7 +104,7 @@ class RouterTests(unittest.TestCase):
 
 
 class PersistentCacheTests(unittest.TestCase):
-    """Ce qu'ava a compris une fois, elle le sait encore apres redemarrage."""
+    """What ava understood once, she still knows after a restart."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -129,7 +129,7 @@ class PersistentCacheTests(unittest.TestCase):
         self.assertEqual(result.target, "Spotify")
 
     def test_a_tampered_cache_cannot_smuggle_an_action(self):
-        # le fichier est en clair dans .cache : il repasse par la validation.
+        # the file sits in clear text in .cache, so it goes back through validation.
         self.path.write_text(
             '{"coucou": {"intent": "verrouiller", "confiance": 0.6},'
             ' "salut": {"intent": "formater_le_disque", "confiance": 1.0}}',

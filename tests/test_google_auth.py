@@ -97,7 +97,7 @@ class CallbackTests(unittest.TestCase):
         self.auth = ga.GoogleAuth(Path(self.tmp.name) / "token.json")
 
     class FakeServer:
-        """Sert une seule reponse, comme le vrai serveur de callback."""
+        """Serves exactly one response, like the real callback server."""
 
         def __init__(self, answer):
             self.answer = answer
@@ -120,7 +120,7 @@ class CallbackTests(unittest.TestCase):
         return exchange
 
     def test_a_forged_state_is_rejected(self):
-        # protection csrf : sans le bon state, aucun echange de code.
+        # csrf guard: without the right state, no code exchange happens.
         exchange = self._run_callback({"code": "abc", "state": "pas-le-bon", "error": ""})
         exchange.assert_not_called()
         self.assertIn("state", self.auth._pending["error"])

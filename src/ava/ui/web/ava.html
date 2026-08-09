@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Ava — mini assistant</title>
-  <!-- orbe fluide local (canvas), meme rendu que l'ecran d'accueil, sans reseau -->
+  <!-- the fluid orb, drawn locally on a canvas: same look as the startup screen, no network -->
 
   <style>
     :root{
@@ -477,8 +477,8 @@
       return el;
     }
     function streamWords(el,text,delays){
-      // Revele le texte mot a mot. Si Python a mesure la voix, on suit ses
-      // instants ; sinon cadence fixe de 45 ms comme avant.
+      // Reveal the text word by word. If Python measured the voice we follow
+      // its timings; otherwise a fixed 45 ms cadence, as before.
       el.textContent="";el.dataset.startedAt=String(performance.now());
       const parts=String(text).split(/(\s+)/);let wi=0;
       const marks=Array.isArray(delays)&&delays.length?delays:null;
@@ -516,7 +516,7 @@
       if(hasApi("finish_startup"))window.pywebview.api.finish_startup();
       setTimeout(()=>input.focus(),220);
     }
-    // petites illustrations meteo (svg inline, animees en css)
+    // small weather illustrations (inline svg, animated in css)
     const WXG={
       clear:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="clear-day"><g id="Sun"><circle id="Core" cx="64" cy="63.9999" r="19.5" fill="url(#paint0_linear_1802_5186)" stroke="#F8AF18"/><g id="Rays"><path d="M61 19C61 17.3431 62.3431 16 64 16C65.6568 16 67 17.3431 67 19V33C67 34.6569 65.6568 36 64 36C62.3431 36 61 34.6569 61 33V19Z" fill="#F8AF18"/><path d="M93.6985 30.0589C94.87 28.8873 96.7696 28.8873 97.9411 30.0589C99.1127 31.2304 99.1127 33.1299 97.9411 34.3015L88.0416 44.201C86.8701 45.3726 84.9706 45.3726 83.799 44.201C82.6274 43.0294 82.6274 41.1299 83.799 39.9584L93.6985 30.0589Z" fill="#F8AF18"/><path d="M109 61C110.657 61 112 62.3432 112 64C112 65.6569 110.657 67 109 67H95C93.3431 67 92 65.6569 92 64C92 62.3432 93.3431 61 95 61H109Z" fill="#F8AF18"/><path d="M97.9411 93.6985C99.1127 94.8701 99.1127 96.7696 97.9411 97.9411C96.7696 99.1127 94.8701 99.1127 93.6985 97.9411L83.799 88.0416C82.6274 86.8701 82.6274 84.9706 83.799 83.799C84.9706 82.6274 86.8701 82.6274 88.0416 83.799L97.9411 93.6985Z" fill="#F8AF18"/><path d="M61 95C61 93.3431 62.3431 92 64 92C65.6568 92 67 93.3431 67 95V109C67 110.657 65.6568 112 64 112C62.3431 112 61 110.657 61 109V95Z" fill="#F8AF18"/><path d="M39.9584 83.799C41.1299 82.6274 43.0294 82.6274 44.201 83.799C45.3726 84.9706 45.3726 86.8701 44.201 88.0416L34.3015 97.9411C33.1299 99.1127 31.2304 99.1127 30.0589 97.9411C28.8873 96.7696 28.8873 94.87 30.0589 93.6985L39.9584 83.799Z" fill="#F8AF18"/><path d="M33 61C34.6569 61 36 62.3431 36 64C36 65.6568 34.6569 67 33 67H19C17.3431 67 16 65.6568 16 64C16 62.3431 17.3431 61 19 61H33Z" fill="#F8AF18"/><path d="M44.201 39.9584C45.3726 41.1299 45.3726 43.0294 44.201 44.201C43.0294 45.3726 41.1299 45.3726 39.9584 44.201L30.0589 34.3015C28.8873 33.1299 28.8873 31.2305 30.0589 30.0589C31.2305 28.8873 33.1299 28.8873 34.3015 30.0589L44.201 39.9584Z" fill="#F8AF18"/><animateTransform attributeName="transform" type="rotate" values="0 64.0 64.0;360 64.0 64.0" dur="6s" begin="0s" repeatCount="indefinite"/></g></g></g><defs><linearGradient id="paint0_linear_1802_5186" x1="64" y1="43.9999" x2="64" y2="83.9999" gradientUnits="userSpaceOnUse"><stop stop-color="#FBBF24"/><stop offset="1" stop-color="#F8AF18"/></linearGradient></defs></svg>',
       partly:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="partly-cloudy-day" clip-path="url(#clip0_1858_8241)"><g id="Sky"><g id="Sun"><circle id="Core" cx="39" cy="51" r="8.5" fill="url(#paint0_linear_1858_8241)" stroke="#F8AF18"/><g id="Rays"><path d="M37.6875 31.3125C37.6875 30.5876 38.2751 30 39 30C39.7249 30 40.3125 30.5876 40.3125 31.3125V37.4375C40.3125 38.1624 39.7249 38.75 39 38.75C38.2751 38.75 37.6875 38.1624 37.6875 37.4375V31.3125Z" fill="#F8AF18"/><path d="M51.9931 36.1508C52.5056 35.6382 53.3367 35.6382 53.8492 36.1508C54.3618 36.6633 54.3618 37.4943 53.8492 38.0069L49.5182 42.3379C49.0056 42.8505 48.1746 42.8505 47.6621 42.3379C47.1495 41.8254 47.1495 40.9944 47.6621 40.4818L51.9931 36.1508Z" fill="#F8AF18"/><path d="M58.6875 49.6875C59.4124 49.6875 60 50.2751 60 51C60 51.7249 59.4124 52.3125 58.6875 52.3125H52.5625C51.8376 52.3125 51.25 51.7249 51.25 51C51.25 50.2751 51.8376 49.6875 52.5625 49.6875H58.6875Z" fill="#F8AF18"/><path d="M53.8492 63.9931C54.3618 64.5057 54.3618 65.3367 53.8492 65.8492C53.3367 66.3618 52.5056 66.3618 51.9931 65.8492L47.6621 61.5182C47.1495 61.0057 47.1495 60.1746 47.6621 59.6621C48.1746 59.1495 49.0057 59.1495 49.5182 59.6621L53.8492 63.9931Z" fill="#F8AF18"/><path d="M37.6875 64.5625C37.6875 63.8376 38.2751 63.25 39 63.25C39.7249 63.25 40.3125 63.8376 40.3125 64.5625V70.6875C40.3125 71.4124 39.7249 72 39 72C38.2751 72 37.6875 71.4124 37.6875 70.6875V64.5625Z" fill="#F8AF18"/><path d="M28.4818 59.6621C28.9943 59.1495 29.8254 59.1495 30.3379 59.6621C30.8505 60.1746 30.8505 61.0056 30.3379 61.5182L26.0069 65.8492C25.4943 66.3618 24.6633 66.3618 24.1508 65.8492C23.6382 65.3367 23.6382 64.5056 24.1508 63.9931L28.4818 59.6621Z" fill="#F8AF18"/><path d="M25.4375 49.6875C26.1624 49.6875 26.75 50.2751 26.75 51C26.75 51.7249 26.1624 52.3125 25.4375 52.3125H19.3125C18.5876 52.3125 18 51.7249 18 51C18 50.2751 18.5876 49.6875 19.3125 49.6875H25.4375Z" fill="#F8AF18"/><path d="M30.3379 40.4818C30.8505 40.9944 30.8505 41.8254 30.3379 42.3379C29.8254 42.8505 28.9944 42.8505 28.4818 42.3379L24.1508 38.0069C23.6382 37.4944 23.6382 36.6633 24.1508 36.1508C24.6633 35.6382 25.4944 35.6382 26.0069 36.1508L30.3379 40.4818Z" fill="#F8AF18"/><animateTransform attributeName="transform" type="rotate" values="0 39.0 51.0;360 39.0 51.0" dur="6s" begin="0s" repeatCount="indefinite"/></g></g><g id="Clouds"><g id="Cloud"><path id="Cloud_2" d="M55.2623 48.4746C60.1227 40.6111 70.2975 37.38 78.8151 40.9434C87.3214 44.5023 92.138 54.0026 89.903 62.9648L89.7418 63.6143L90.4108 63.585C97.4203 63.2791 103.5 68.9917 103.5 76.0283C103.5 82.8395 97.7717 88.4997 90.9772 88.5H37.9537C31.1275 88.5018 25.2029 83.1709 24.5592 76.3604C23.9158 69.5518 28.7369 63.2124 35.443 61.9453L35.9264 61.8535L35.8424 61.3691C35.0256 56.6239 37.1258 51.7168 41.1051 49.0127C45.0951 46.3014 50.4459 46.1537 54.5797 48.6396L55.0026 48.8945L55.2623 48.4746Z" fill="url(#paint1_linear_1858_8241)" stroke="#E6EFFC" stroke-miterlimit="10"/></g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g></g></g><defs><linearGradient id="paint0_linear_1858_8241" x1="39" y1="42" x2="39" y2="60" gradientUnits="userSpaceOnUse"><stop stop-color="#FBBF24"/><stop offset="1" stop-color="#F8AF18"/></linearGradient><linearGradient id="paint1_linear_1858_8241" x1="64.0008" y1="39" x2="64.0008" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F7FE"/><stop offset="1" stop-color="#E6EFFC"/></linearGradient><clipPath id="clip0_1858_8241"><rect width="128" height="128" fill="white"/></clipPath></defs></svg>',
@@ -526,12 +526,12 @@
       storm:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="thunderstorms-day" clip-path="url(#clip0_1858_9913)"><g id="Sky"><g id="Sun"><circle id="Core" cx="39" cy="51" r="8.5" fill="url(#paint0_linear_1858_9913)" stroke="#F8AF18"/><g id="Rays"><path d="M37.6875 31.3125C37.6875 30.5876 38.2751 30 39 30C39.7249 30 40.3125 30.5876 40.3125 31.3125V37.4375C40.3125 38.1624 39.7249 38.75 39 38.75C38.2751 38.75 37.6875 38.1624 37.6875 37.4375V31.3125Z" fill="#F8AF18"/><path d="M51.9931 36.1508C52.5056 35.6382 53.3367 35.6382 53.8492 36.1508C54.3618 36.6633 54.3618 37.4943 53.8492 38.0069L49.5182 42.3379C49.0056 42.8505 48.1746 42.8505 47.6621 42.3379C47.1495 41.8254 47.1495 40.9944 47.6621 40.4818L51.9931 36.1508Z" fill="#F8AF18"/><path d="M58.6875 49.6875C59.4124 49.6875 60 50.2751 60 51C60 51.7249 59.4124 52.3125 58.6875 52.3125H52.5625C51.8376 52.3125 51.25 51.7249 51.25 51C51.25 50.2751 51.8376 49.6875 52.5625 49.6875H58.6875Z" fill="#F8AF18"/><path d="M53.8492 63.9931C54.3618 64.5057 54.3618 65.3367 53.8492 65.8492C53.3367 66.3618 52.5056 66.3618 51.9931 65.8492L47.6621 61.5182C47.1495 61.0057 47.1495 60.1746 47.6621 59.6621C48.1746 59.1495 49.0057 59.1495 49.5182 59.6621L53.8492 63.9931Z" fill="#F8AF18"/><path d="M37.6875 64.5625C37.6875 63.8376 38.2751 63.25 39 63.25C39.7249 63.25 40.3125 63.8376 40.3125 64.5625V70.6875C40.3125 71.4124 39.7249 72 39 72C38.2751 72 37.6875 71.4124 37.6875 70.6875V64.5625Z" fill="#F8AF18"/><path d="M28.4818 59.6621C28.9943 59.1495 29.8254 59.1495 30.3379 59.6621C30.8505 60.1746 30.8505 61.0056 30.3379 61.5182L26.0069 65.8492C25.4943 66.3618 24.6633 66.3618 24.1508 65.8492C23.6382 65.3367 23.6382 64.5056 24.1508 63.9931L28.4818 59.6621Z" fill="#F8AF18"/><path d="M25.4375 49.6875C26.1624 49.6875 26.75 50.2751 26.75 51C26.75 51.7249 26.1624 52.3125 25.4375 52.3125H19.3125C18.5876 52.3125 18 51.7249 18 51C18 50.2751 18.5876 49.6875 19.3125 49.6875H25.4375Z" fill="#F8AF18"/><path d="M30.3379 40.4818C30.8505 40.9944 30.8505 41.8254 30.3379 42.3379C29.8254 42.8505 28.9944 42.8505 28.4818 42.3379L24.1508 38.0069C23.6382 37.4944 23.6382 36.6633 24.1508 36.1508C24.6633 35.6382 25.4944 35.6382 26.0069 36.1508L30.3379 40.4818Z" fill="#F8AF18"/><animateTransform attributeName="transform" type="rotate" values="0 39.0 51.0;360 39.0 51.0" dur="6s" begin="0s" repeatCount="indefinite"/></g></g><g id="Clouds"><g id="Cloud"><path id="Cloud_2" d="M55.2625 48.4746C60.1228 40.6111 70.2976 37.38 78.8152 40.9434C87.3215 44.5023 92.1381 54.0026 89.9031 62.9648L89.7419 63.6143L90.4109 63.585C97.4205 63.2791 103.5 68.9917 103.5 76.0283C103.5 82.8395 97.7719 88.4997 90.9773 88.5H37.9539C31.1276 88.5018 25.203 83.1709 24.5593 76.3604C23.9159 69.5518 28.7371 63.2124 35.4431 61.9453L35.9265 61.8535L35.8425 61.3691C35.0258 56.6239 37.1259 51.7168 41.1052 49.0127C45.0952 46.3014 50.4461 46.1537 54.5798 48.6396L55.0027 48.8945L55.2625 48.4746Z" fill="url(#paint1_linear_1858_9913)" stroke="#E6EFFC" stroke-miterlimit="10"/></g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g></g><g id="Lightning"><path id="Lightning Bolt" d="M71.1729 68.5L63.5566 83.041L63.1729 83.7725H75.002L56.9521 107.892L60.4893 91.0117L60.6162 90.4092H52.7041L60.3555 68.5H71.1729Z" fill="url(#paint2_linear_1858_9913)" stroke="#F6A823" stroke-miterlimit="10"><animate attributeName="opacity" values="1;1;0;1;0;1;0;1;1" dur="2s" begin="0s" repeatCount="indefinite" keyTimes="0;0.25;0.33;0.42;0.5;0.57;0.63;0.67;1"/></path></g></g><defs><linearGradient id="paint0_linear_1858_9913" x1="39" y1="42" x2="39" y2="60" gradientUnits="userSpaceOnUse"><stop stop-color="#FBBF24"/><stop offset="1" stop-color="#F8AF18"/></linearGradient><linearGradient id="paint1_linear_1858_9913" x1="64.0009" y1="39" x2="64.0009" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F7FE"/><stop offset="1" stop-color="#E6EFFC"/></linearGradient><linearGradient id="paint2_linear_1858_9913" x1="64.528" y1="66.0377" x2="84.4144" y2="77.4572" gradientUnits="userSpaceOnUse"><stop stop-color="#F7B23B"/><stop offset="1" stop-color="#F6A823"/></linearGradient><clipPath id="clip0_1858_9913"><rect width="128" height="128" fill="white"/></clipPath></defs></svg>',
       fog:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="fog" clip-path="url(#clip0_1858_9374)"><g id="Sky"><g id="Clouds"><g id="Cloud"><path id="Cloud_2" d="M55.2623 48.4746C60.1227 40.6111 70.2975 37.38 78.8151 40.9434C87.3214 44.5023 92.138 54.0026 89.903 62.9648L89.7418 63.6143L90.4108 63.585C97.4203 63.2791 103.5 68.9917 103.5 76.0283C103.5 82.8395 97.7717 88.4997 90.9772 88.5H37.9537C31.1275 88.5018 25.2029 83.1709 24.5592 76.3604C23.9158 69.5518 28.7369 63.2124 35.443 61.9453L35.9264 61.8535L35.8424 61.3691C35.0256 56.6239 37.1258 51.7168 41.1051 49.0127C45.0951 46.3014 50.4459 46.1537 54.5797 48.6396L55.0026 48.8945L55.2623 48.4746Z" fill="url(#paint0_linear_1858_9374)" stroke="#E6EFFC" stroke-miterlimit="10"/></g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g></g><g id="Precipitation"><path id="Line 2" d="M40 95H88" stroke="#E2E8F0" stroke-width="3" stroke-miterlimit="10" stroke-linecap="round"><animateTransform attributeName="transform" type="translate" values="0 0;3 0;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></path><path id="Line 1" d="M40 103H88" stroke="#E2E8F0" stroke-width="3" stroke-miterlimit="10" stroke-linecap="round"><animateTransform attributeName="transform" type="translate" values="0 0;3 0;0 0" dur="3s" begin="0.2s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></path></g></g><defs><linearGradient id="paint0_linear_1858_9374" x1="64.0008" y1="39" x2="64.0008" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F7FE"/><stop offset="1" stop-color="#E6EFFC"/></linearGradient><clipPath id="clip0_1858_9374"><rect width="128" height="128" fill="white"/></clipPath></defs></svg>'
     };
-    // ~165 mots/minute : cadence de lecture proche d'une voix posee.
+    // ~165 words per minute: a reading pace close to an unhurried voice.
     function estimateSpeechMs(text){const n=String(text||"").trim().split(/\s+/).filter(Boolean).length;return Math.max(3200,Math.round(n/165*60*1000))}
     function revealTimed(el,text,totalMs,delays){
-      // Revele le texte mot a mot. Python fournit maintenant l'instant exact de
-      // chaque mot (mesure sur l'audio genere, phrase par phrase) ; a defaut on
-      // retombe sur une repartition lineaire.
+      // Reveal the text word by word. Python now supplies the exact moment of
+      // each word (measured on the generated audio, sentence by sentence); we
+      // fall back to a linear spread when it doesn't.
       el.textContent="";const parts=String(text||"").split(/(\s+)/);
       const words=parts.filter(p=>!/^\s*$/.test(p)).length||1,step=Math.max(24,totalMs/words);
       const marks=Array.isArray(delays)&&delays.length?delays:null;
@@ -549,17 +549,17 @@
       shell.classList.remove("dormant","compact");shell.classList.add("startup");
       $("startupName").textContent=data.name||"Bienvenue";$("startupCity").textContent=data.city||"";$("startupDate").textContent=data.date||"";
       $("startupNews").textContent=data.news||"Recherche d’une actualité IA récente…";$("startupSource").textContent=data.source||"Source en cours";
-      // « hier » se lit plus vite qu'une date : on garde la date en infobulle.
+      // "hier" reads faster than a date, so the date stays in the tooltip.
       const pub=$("startupPublished");pub.textContent=data.freshness||data.published||"";pub.title=data.published||"";
-      // « Bonjour » en gros a 22 h, juste a cote d'un texte qui dit « Bonsoir » :
-      // le salut suit l'heure, comme le briefing parle.
+      // A huge "Bonjour" at 10 pm right next to text saying "Bonsoir": the
+      // greeting follows the clock, the same way the spoken briefing does.
       $("startupHello").textContent=data.hello||"Bonjour";
-      // l'auteur a son propre style : colle a la citation, il ressemblait a une
-      // deuxieme phrase de la citation elle-meme.
+      // the author gets its own style: butted up against the quote it looked
+      // like a second sentence of the quote itself.
       const q=$("startupQuote");q.replaceChildren(document.createTextNode(data.quote||"Construis aujourd’hui ce dont tu seras fier demain."));
       if(data.quote_author){const a=document.createElement("span");a.className="startup-quote-author";a.textContent="— "+data.quote_author;q.appendChild(a)}
       startupSourceUrl=/^https?:\/\//.test(data.source_url||"")?data.source_url:"";
-      // meteo illustree (colonne gauche) + transcript "ce qu'ava te dit" (droite)
+      // illustrated weather (left column) + the "what ava tells you" transcript (right)
       const wx=data.weather;
       if(wx){
         $("startupWeather").classList.remove("hidden");
@@ -568,8 +568,9 @@
         $("startupWxDesc").textContent=wx.desc||"";
         $("startupWxRange").innerHTML=(wx.tmax!=null)?`↑ <b>${wx.tmax}°</b>&nbsp; ↓ <b>${wx.tmin}°</b>`:"";
       } else {$("startupWeather").classList.add("hidden")}
-      // le transcript se revele au rythme de la parole (mots/minute). quand ava
-      // parle vraiment (briefing), Python renvoie la duree exacte via avaStartupBrief.
+      // the transcript reveals at speaking pace (words per minute). when ava
+      // really talks (the briefing), Python sends the exact duration through
+      // avaStartupBrief.
       const brief=String(data.briefing||"").trim();let briefMs=0;
       if(brief){
         $("startupBriefWrap").classList.remove("hidden");
@@ -609,7 +610,7 @@
     $("startupSkip").addEventListener("click",finishStartup);
     $("startupSource").addEventListener("click",()=>{if(!startupSourceUrl)return;if(hasApi("open_external"))window.pywebview.api.open_external(startupSourceUrl);else window.open(startupSourceUrl,"_blank")});
 
-    // ----- Rive : AI Orb Mascot par aln.omrv, pilotee par les vrais etats Ava.
+    // ----- the orb, driven by ava's real states.
     function setOrbFlag(name,value){try{const p=orbState&&orbState.boolean(name);if(p)p.value=!!value}catch(_){}}
     function fireOrb(name){try{const p=orbState&&orbState.trigger(name);if(p)p.trigger()}catch(_){}}
     function syncRive(){
@@ -641,11 +642,11 @@
       function draw(now){
         requestAnimationFrame(draw);if(!shell.classList.contains("startup")||!resizeCanvas())return;
         const rect=canvas.getBoundingClientRect(),w=rect.width,h=rect.height,cx=w/2,cy=h/2;
-        // Toute la geometrie etait en pixels durs (rayon 79, flou 34) alors que
-        // le canvas peut faire n'importe quelle taille : le blob debordait et se
-        // faisait trancher au carre par le bord. On derive maintenant une echelle
-        // du canvas lui-meme, calee pour que blob + ondulation + halo tiennent
-        // toujours dedans (79+7.2 de forme + 34 de flou = 120,2 unites de dessin).
+        // All the geometry was in hard pixels (radius 79, blur 34) while the
+        // canvas can be any size at all: the blob overflowed and got sliced
+        // square by the edge. We now derive a scale from the canvas itself,
+        // sized so blob + ripple + halo always fit inside (79+7.2 of shape plus
+        // 34 of blur = 120.2 drawing units).
         const k=Math.min(w,h)/2/120;
         const speaking=currentState==="speaking",acting=currentState==="action";
         const speed=speaking?2.15:acting?1.3:.72,amplitude=(speaking?7.2:acting?4.4:3.1)*k,t=reduceMotion?0:now/1000*speed;
@@ -663,8 +664,8 @@
       }
       requestAnimationFrame(draw);
     }
-    // orbe fluide du topbar : meme rendu liquide que l'ecran d'accueil, colore
-    // par l'etat courant. remplace la mascotte Rive (cartoon) par le "bel orbe".
+    // the topbar orb: the same liquid look as the startup screen, coloured by
+    // the current state. replaced the cartoon mascot with the nicer orb.
     function initAvatarOrb(){
       const canvas=$("orbCanvas"),ctx=canvas&&canvas.getContext("2d");if(!ctx)return;
       const reduceMotion=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -716,7 +717,7 @@
     }
     window.addEventListener("load",()=>{initAvatarOrb();initStartupVoiceOrb()});
 
-    // ----- API appelee par Python
+    // ----- the api python calls
     window.avaOverlayMode=()=>document.documentElement.style.background="transparent";
     window.avaReady=options=>{const cfg=options||{};showIllustrations=cfg.show_illustrations!==false;shell.classList.toggle("compact",cfg.start_expanded===false);shell.classList.remove("dormant");setState("idle");setTimeout(()=>{if(!shell.classList.contains("startup"))input.focus()},180)};
     window.avaStartup=profile=>renderStartup(profile);
@@ -735,7 +736,7 @@
     window.avaError=text=>addError(text||"Une erreur est survenue.");
     window.avaChoices=(prompt,yesLabel,noLabel)=>{$("choicePrompt").textContent=prompt||"Tu confirmes ?";$("choiceYes").textContent=yesLabel||"Oui";$("choiceNo").textContent=noLabel||"Non";$("choices").classList.remove("hidden");shell.classList.remove("compact")};
     window.avaClearChoices=()=>$("choices").classList.add("hidden");
-    // Ava a ete coupee : on fige la revelation la ou la voix s'est arretee.
+    // Ava was cut off: freeze the reveal wherever the voice stopped.
     window.avaInterrupted=()=>{
       const bubbles=messages.querySelectorAll(".message.assistant .bubble");
       const bubble=bubbles[bubbles.length-1];if(!bubble)return;
@@ -751,10 +752,10 @@
     window.avaBootStep=index=>{const row=$("bootRows").children[index];if(row)row.classList.add("done")};
     window.avaBootDone=()=>$("boot").classList.add("hidden");
     window.avaStartupHint=()=>{shell.classList.remove("dormant");setState("idle")};
-    // ouverture des reglages depuis le menu de la barre de menus.
+    // opening the settings from the menu bar menu.
     window.avaOpenSettings=()=>{shell.classList.remove("dormant");shell.classList.remove("compact");openSettings()};
 
-    // ----- Reglages
+    // ----- settings
     const F={name:$("fName"),city:$("fCity"),engine:$("fEngine"),reference:$("fReference"),voice:$("fVoice"),gid:$("fGid"),gsecret:$("fGsecret"),sens:$("fSens"),phrases:$("fPhrases"),apps:$("fApps"),illustrations:$("fIllustrations"),continuous:$("fContinuous"),startup:$("fStartup"),expanded:$("fExpanded"),hidden:$("fHidden")};
     async function openSettings(){
       let cfg=null;try{if(hasApi("get_config"))cfg=await window.pywebview.api.get_config()}catch(_){}
@@ -770,8 +771,8 @@
     }
     $("gear").addEventListener("click",openSettings);$("setClose").addEventListener("click",closeSettings);$("setCancel").addEventListener("click",closeSettings);$("setSave").addEventListener("click",saveSettings);
 
-    // ----- Connecteur Google : le flux OAuth vit cote Python, ici on affiche
-    // l'etat et on sonde tant que la connexion est en cours.
+    // ----- the google connector: the oauth flow lives on the python side, here
+    // we show the state and poll while a connection is in progress.
     let googleTimer=null;
     function stopGooglePolling(){if(googleTimer){clearInterval(googleTimer);googleTimer=null}}
     function renderGoogle(status){
@@ -819,13 +820,13 @@
         const result=await window.pywebview.api.test_voice({engine:F.engine.value,reference:F.reference.value.trim()});
         note.textContent=result&&result.error?("Erreur : "+result.error):"Écoute…";
       }catch(error){note.textContent="Erreur : "+error}
-      // la voix locale tourne a peu pres au rythme de la parole : on rouvre le
-      // bouton une fois l'extrait passe, pas avant.
+      // the local voice runs at roughly speaking pace: re-enable the button
+      // once the sample has played, not before.
       setTimeout(()=>{button.disabled=false;note.textContent=""},9000);
     });
     $("googleConsole").addEventListener("click",event=>{event.preventDefault();const url="https://console.cloud.google.com/apis/credentials";if(hasApi("open_external"))window.pywebview.api.open_external(url);else window.open(url,"_blank")});
 
-    // Apercu autonome ; Python reprend la main via avaReady au chargement reel.
+    // Standalone preview; Python takes over through avaReady on the real load.
     setState("idle");resizeInput();
   })();
   </script>

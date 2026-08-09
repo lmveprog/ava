@@ -36,7 +36,7 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(found[0].description, "Donne l'état de la mer.")
 
     def test_a_skill_without_description_is_ignored(self):
-        # sans description, ava n'a aucun moyen de savoir quand s'en servir.
+        # with no description, ava has no way of knowing when to use it.
         write_skill(self.root, "muette", name="muette")
         self.assertEqual(skills.discover([self.root]), [])
 
@@ -65,7 +65,7 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class ProgressiveDisclosureTests(unittest.TestCase):
-    """La découverte ne lit que les métadonnées ; le corps vient à l'activation."""
+    """Discovery reads metadata only; the body comes at activation."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -87,7 +87,7 @@ class ProgressiveDisclosureTests(unittest.TestCase):
 
 
 class SafetyTests(unittest.TestCase):
-    """Une compétence exécute du code : elle reste dans son bac à sable."""
+    """A skill runs code, so it stays inside its own sandbox."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -95,7 +95,7 @@ class SafetyTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
 
     def test_a_script_outside_the_skill_folder_is_refused(self):
-        # sans ce contrôle, `command: ../../../bin/rm` sortirait du bac à sable.
+        # without this check, `command: ../../../bin/rm` would leave the sandbox.
         write_skill(self.root, "evadee", name="evadee", description="Test.",
                     command="../../../bin/echo")
         skill = skills.discover([self.root])[0]

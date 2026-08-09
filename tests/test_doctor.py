@@ -9,8 +9,8 @@ from ava import doctor as doctor  # noqa: E402
 
 
 class GoogleCheckTests(unittest.TestCase):
-    """Le piege maison : google delivre un jeton SANS le scope calendar quand
-    l'API est desactivee. Ava parait connectee et ne lit rien."""
+    """The house special: google hands over a token WITHOUT the calendar scope
+    when the api is disabled. Ava looks connected and reads nothing."""
 
     def _statuses(self, checks):
         return {check.name: check for check in checks}

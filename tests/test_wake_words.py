@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
 
 class FalseWakeTests(unittest.TestCase):
-    """Ava se reveillait toute seule : vosk-small fabrique « ava » sur du bruit."""
+    """Ava woke up on her own: vosk-small manufactures "ava" out of noise."""
 
     def test_the_bare_name_never_wakes_on_a_partial(self):
         gate = PartialWakeGate(hold_seconds=0.0)

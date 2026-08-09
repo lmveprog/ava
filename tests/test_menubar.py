@@ -13,7 +13,7 @@ from ava.state import AvaState  # noqa: E402
 
 class IconTests(unittest.TestCase):
     def test_every_state_has_its_icon(self):
-        # sinon l'icone se figerait sur l'etat precedent sans qu'on le voie.
+        # otherwise the icon would freeze on the previous state unnoticed.
         for state in AvaState:
             self.assertIn(state.value, menubar.STATE_SYMBOLS, state.value)
             self.assertIn(state.value, menubar.STATE_LABELS, state.value)
@@ -25,7 +25,7 @@ class IconTests(unittest.TestCase):
 
 
 class AnchorLayoutTests(unittest.TestCase):
-    """Le panneau doit tomber sous l'icone, jamais dans un coin arbitraire."""
+    """The panel must drop under the icon, never into some arbitrary corner."""
 
     SCREEN = (0.0, 0.0, 1512.0, 949.0)      # ecran integre, zone visible
 
@@ -33,7 +33,7 @@ class AnchorLayoutTests(unittest.TestCase):
         return overlay._layout_origin(*self.SCREEN, width, height, placement, anchor)
 
     def test_the_panel_is_centred_under_the_icon(self):
-        # icone de 32 px dont le bord gauche est a x=963 -> centre a 979.
+        # a 32 px icon whose left edge sits at x=963 -> centre at 979.
         x, _y = self.origin((963.0, 949.0, 32.0, 29.0))
         self.assertEqual(x, 979 - 420 // 2)
 
@@ -42,7 +42,7 @@ class AnchorLayoutTests(unittest.TestCase):
         self.assertEqual(y, 949 - 590 - overlay.ANCHOR_GAP)
 
     def test_an_icon_at_the_very_edge_stays_on_screen(self):
-        # avec beaucoup d'extensions, l'icone d'ava finit collee au bord droit.
+        # with a lot of extensions, ava's icon ends up hard against the right edge.
         x, _y = self.origin((1500.0, 949.0, 32.0, 29.0))
         self.assertLessEqual(x + 420, 1512 - overlay.MARGIN + 1)
         self.assertGreaterEqual(x, overlay.MARGIN - 1)

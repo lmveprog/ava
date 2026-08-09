@@ -20,7 +20,7 @@ class AudioDetectionTests(unittest.TestCase):
         self.assertTrue(detector.feed(1.25, 0.05))
 
     def test_typing_never_makes_a_clap(self):
-        # deux touches a 200 ms d'intervalle : c'est ce qui reveillait Ava
+        # two keystrokes 200 ms apart: this is what used to wake Ava
         # toute seule pendant que Matheus travaillait.
         detector = jarvis.ClapDetector()
         for moment, level in ((1.00, 0.33), (1.05, 0.02), (1.20, 0.41), (1.25, 0.02),
@@ -28,7 +28,7 @@ class AudioDetectionTests(unittest.TestCase):
             self.assertFalse(detector.feed(moment, level))
 
     def test_a_lopsided_pair_is_not_a_double_clap(self):
-        # une main + un choc quelconque : les deux coups doivent se ressembler.
+        # one hand plus some random knock: the two hits have to look alike.
         detector = jarvis.ClapDetector()
         self.assertFalse(detector.feed(1.00, 2.00))
         self.assertFalse(detector.feed(1.05, 0.05))

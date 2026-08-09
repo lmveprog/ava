@@ -1,4 +1,4 @@
-"""le grand rituel du matin ne se joue qu'une fois par jour."""
+"""the big morning ritual only plays once a day."""
 
 import sys
 import unittest
@@ -26,7 +26,7 @@ class RitualOncePerDayTests(unittest.TestCase):
         self.assertIs(thread.call_args.kwargs["target"], ava.run_welcome_flow)
 
     def test_the_second_one_only_says_hello(self):
-        """« bonjour ava » a 18 h ne doit pas relancer musique + apps + 45 s."""
+        """a "bonjour ava" at 6 pm must not restart music + apps + 45 s."""
         ava.mark_ritual_done()
         with patch.object(ava.threading, "Thread") as thread:
             ava.trigger_welcome("bonjour ava")
@@ -37,7 +37,7 @@ class RitualOncePerDayTests(unittest.TestCase):
         self.assertFalse(ava.ritual_done_today("2026-08-08"))
 
     def test_a_burst_of_triggers_only_starts_one_flow(self):
-        # deux claps coup sur coup, ou un clap double d'un mot-cle.
+        # two claps back to back, or a clap doubled by a wake word.
         with patch.object(ava.threading, "Thread") as thread:
             ava.trigger_welcome("double clap")
             ava.trigger_welcome("bonjour ava")

@@ -10,7 +10,7 @@ from ava.services import google_calendar as gc  # noqa: E402
 
 
 class FrenchDateTests(unittest.TestCase):
-    # un jeudi, pour que « lundi » et « samedi » tombent des deux cotes.
+    # a thursday, so "lundi" and "samedi" fall on either side.
     NOW = dt.datetime(2026, 8, 6, 10, 0)
 
     def parse(self, text):
@@ -29,7 +29,7 @@ class FrenchDateTests(unittest.TestCase):
                          dt.datetime(2026, 9, 12, 15, 0))
 
     def test_a_weekday_means_the_next_one(self):
-        # jeudi + « lundi » = le lundi suivant, pas le lundi passe.
+        # thursday + "lundi" = next monday, not the one just gone.
         self.assertEqual(self.parse("lundi à 8h"), dt.datetime(2026, 8, 10, 8, 0))
 
     def test_a_weekday_that_is_today_means_next_week(self):

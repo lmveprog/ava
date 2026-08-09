@@ -1,4 +1,4 @@
-"""l'actualité du briefing : fraîche, lisible à voix haute, jamais redondante."""
+"""the briefing's news: fresh, readable out loud, never repeating itself."""
 
 import datetime
 import sys
@@ -24,7 +24,7 @@ class FreshnessTests(unittest.TestCase):
         self.assertIsNone(ai_news.pick(old))
 
     def test_the_fresh_window_wins_over_raw_relevance(self):
-        # une annonce majeure d'il y a 5 jours ne passe pas devant hier.
+        # a major announcement from 5 days ago doesn't jump ahead of yesterday.
         candidates = [
             item("Introducing our new frontier model", hours=24 * 5),
             item("AI tutors and classroom research", source="Hugging Face", hours=20),
@@ -51,7 +51,7 @@ class FreshnessTests(unittest.TestCase):
 
 
 class FreshnessPhraseTests(unittest.TestCase):
-    """Sans repère de temps, une annonce de mardi sonne comme celle du jour."""
+    """With no time marker, a tuesday post sounds like today's."""
 
     def setUp(self):
         self.now = datetime.datetime(2026, 8, 8, 10, 0, tzinfo=datetime.timezone.utc)
@@ -103,10 +103,10 @@ class SentenceTests(unittest.TestCase):
 
 
 class TranslationTests(unittest.TestCase):
-    def test_un_titre_francais_est_reformule_lui_aussi(self):
-        """⚠️ un titre de presse francais n'est pas plus dicible qu'un anglais :
-        « Nouveau modele pour les agents » n'a pas de verbe. On ne traduit plus,
-        on **reecrit** — donc le francais passe aussi par le modele."""
+    def test_a_french_headline_gets_rewritten_too(self):
+        """⚠️ a french headline is no more sayable than an english one:
+        "Nouveau modele pour les agents" has no verb. We don't translate any
+        more, we **rewrite** — so french goes through the model too."""
         reponse = {"choices": [{"message": {"content": "Mistral publie un nouveau modèle pour les agents"}}]}
         with patch.dict("os.environ", {"MISTRAL_API_KEY": "x"}, clear=False), \
                 patch.object(ai_news, "_remember_translation"), \
@@ -118,7 +118,7 @@ class TranslationTests(unittest.TestCase):
         post.assert_called_once()
         self.assertIn("publie", dit)
 
-    def test_hors_ligne_le_titre_brut_vaut_mieux_que_rien(self):
+    def test_offline_the_raw_headline_beats_nothing(self):
         from ava import net as net
         net.note_failure("actu:traduction", ConnectionError("coupé"))
         self.addCleanup(net.reset)

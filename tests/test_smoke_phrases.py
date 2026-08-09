@@ -1,11 +1,11 @@
-"""la passe de fumee, devenue test : des phrases vraies, la route attendue.
+"""the smoke pass, turned into a test: real phrasings, the expected route.
 
-les trous corriges ici n'ont pas ete trouves en lisant le code mais en faisant
-passer une cinquantaine de tournures reelles dans `execute_command` avec le
-reseau coupe et les effets de bord bloques. tous rendaient la meme chose —
-« je n'ai pas trouve de source suffisamment claire » — parce que le filet de la
-recherche web attrape tout ce que le routage laisse passer, y compris « salut »
-ou « precedent ». on verifie donc la **route**, pas la phrase rendue.
+the gaps fixed here weren't found by reading the code but by running fifty-odd
+real phrasings through `execute_command` with the network down and the side
+effects blocked. every one of them came back with the same thing — "je n'ai pas
+trouve de source suffisamment claire" — because the web search net catches
+everything the routing lets through, "salut" and "precedent" included. so we
+check the **route**, not the sentence produced.
 """
 
 import sys
@@ -31,7 +31,7 @@ class RoutingGapsTest(unittest.TestCase):
         self.addCleanup(ava.ASSISTANT_STATE.dormant)
 
     def run_phrase(self, phrase: str):
-        """Joue une phrase, rend (ce qui a ete dit, les appels observes)."""
+        """Run a phrasing, return (what was said, the calls observed)."""
         with patch.object(ava, "speak") as speak, \
                 patch.object(ava, "_spotify") as spotify, \
                 patch.object(ava, "_calendar_summary") as agenda, \
@@ -50,9 +50,9 @@ class RoutingGapsTest(unittest.TestCase):
     def assertNoResearch(self, calls, phrase):
         calls["research"].assert_not_called()
 
-    # --- agenda dit sans le mot « agenda » ----------------------------------
+    # --- the calendar, asked for without the word "agenda" ------------------
 
-    def test_l_agenda_se_demande_sans_dire_agenda(self):
+    def test_the_calendar_is_asked_for_without_saying_agenda(self):
         for phrase in ("qu'est-ce que j'ai aujourd'hui",
                        "c'est quoi mon programme demain",
                        "à quelle heure est mon rendez-vous",
@@ -63,7 +63,7 @@ class RoutingGapsTest(unittest.TestCase):
                 calls["agenda"].assert_called_once()
                 self.assertNoResearch(calls, phrase)
 
-    def test_ajouter_un_rendez_vous_reste_une_ecriture(self):
+    def test_adding_an_event_stays_a_write(self):
         """« ajoute un rdv » contient « rendez vous » : l'ecriture passe avant."""
         with patch.object(ava, "_calendar_create") as create, \
                 patch.object(ava, "_calendar_summary") as summary, \
@@ -72,7 +72,7 @@ class RoutingGapsTest(unittest.TestCase):
         create.assert_called_once()
         summary.assert_not_called()
 
-    # --- transport dit tout seul --------------------------------------------
+    # --- transport words said on their own ----------------------------------
 
     def test_suivant_et_precedent_seuls(self):
         _said, calls = self.run_phrase("précédent")
@@ -88,35 +88,35 @@ class RoutingGapsTest(unittest.TestCase):
                 _said, calls = self.run_phrase(phrase)
                 calls["news"].assert_called_once()
 
-    def test_ia_ne_s_attrape_pas_dans_un_autre_mot(self):
+    def test_ia_is_not_caught_inside_another_word(self):
         """« ia » cherche en mot entier : « diaporama » n'est pas de l'actu."""
         _said, calls = self.run_phrase("ouvre le diaporama")
         calls["news"].assert_not_called()
 
-    # --- le nom, les hesitations, les phrases coupees ------------------------
+    # --- the name, hesitations, and sentences cut short ---------------------
 
-    def test_le_nom_en_fin_de_phrase(self):
+    def test_the_name_at_the_end_of_a_sentence(self):
         said, calls = self.run_phrase("salut ava")
         self.assertIn("Salut", said)
         self.assertNoResearch(calls, "salut ava")
 
-    def test_ca_va_n_est_pas_le_nom(self):
-        """« va » n'est qu'a une lettre d'« ava » : la ressemblance mangeait
-        la moitie de la phrase, et « ça va » devenait « ça »."""
+    def test_ca_va_is_not_the_name(self):
+        """\"va\" is one letter from \"ava\": the resemblance ate half the
+        sentence, and \"ça va\" turned into \"ça\"."""
         said, _calls = self.run_phrase("ça va")
         self.assertIn("Ça va", said)
 
-    def test_le_nom_dit_seul_est_un_appel(self):
+    def test_the_name_said_alone_is_someone_calling(self):
         said, calls = self.run_phrase("ava")
         self.assertIn("Oui", said)
         self.assertNoResearch(calls, "ava")
 
-    def test_une_hesitation_ne_lance_pas_de_recherche(self):
+    def test_a_hesitation_starts_no_search(self):
         said, calls = self.run_phrase("euh")
         self.assertNoResearch(calls, "euh")
         self.assertTrue(said)
 
-    def test_un_verbe_sans_complement_redemande(self):
+    def test_a_verb_with_no_object_asks_again(self):
         for phrase, expected in (("ouvre", "Ouvrir quoi"),
                                  ("rappelle-moi", "Te rappeler quoi")):
             with self.subTest(phrase=phrase):
@@ -124,16 +124,16 @@ class RoutingGapsTest(unittest.TestCase):
                 self.assertIn(expected, said)
                 self.assertNoResearch(calls, phrase)
 
-    def test_fermer_ce_que_le_rituel_a_ouvert(self):
+    def test_closing_what_the_ritual_opened(self):
         said, calls = self.run_phrase("ferme tout")
         calls["close"].assert_called_once()
         self.assertIn("ferme", said.lower())
 
-    # --- hors ligne : dire la vraie raison -----------------------------------
+    # --- offline: say the real reason ---------------------------------------
 
-    def test_hors_ligne_ava_dit_qu_elle_n_a_pas_de_reseau(self):
-        """Avant, elle disait avoir cherche sans trouver de source claire —
-        alors qu'elle n'etait meme pas sortie du mac."""
+    def test_offline_ava_says_she_has_no_network(self):
+        """She used to say she'd searched and found no clear source — when she
+        hadn't even left the mac."""
         net.note_failure("test", ConnectionError("coupé"))
         with patch.object(ava, "speak") as speak, patch.object(ava, "ui"), \
                 patch.object(ava.WEB_RESEARCH, "answer") as answer:
@@ -148,7 +148,7 @@ class AgendaSentenceTest(unittest.TestCase):
     def sentence(self, hours):
         import datetime as dt
         from ava.services.google_calendar import GoogleEvent
-        # demain : tout est « a venir » quelle que soit l'heure du test.
+        # tomorrow: everything is upcoming whatever time the test runs.
         base = dt.datetime.now() + dt.timedelta(days=1)
         events = tuple(
             GoogleEvent(id=str(hour), title=f"rendez-vous {index}",
@@ -158,33 +158,33 @@ class AgendaSentenceTest(unittest.TestCase):
         with patch.object(ava, "agenda_events", return_value=(events, "google")):
             return ava.calendar_sentence()
 
-    def test_une_journee_chargee_reste_courte(self):
+    def test_a_busy_day_stays_short(self):
         said = self.sentence([9, 11, 14, 15, 16, 18, 20])
         self.assertIn("7 rendez-vous", said)
         self.assertIn("Et 4 autres ensuite", said)
         self.assertNotIn("rendez-vous 4", said)      # le 4e n'est pas enumere
         self.assertLess(len(said.split()), 30)
 
-    def test_pas_de_reste_pas_de_queue(self):
+    def test_no_remainder_means_no_tail(self):
         said = self.sentence([9, 11, 14])
         self.assertNotIn("ensuite", said)
 
-    def test_un_seul_rendez_vous_ne_s_annonce_pas_comme_une_liste(self):
+    def test_a_single_event_is_not_announced_as_a_list(self):
         said = self.sentence([11])
         self.assertIn("un seul rendez-vous", said)
 
-    def test_l_agenda_vide_se_dit_positivement(self):
+    def test_an_empty_calendar_is_said_positively(self):
         said = self.sentence([])
         self.assertIn("vide", said)
 
 
 class AmbientSpeechTest(unittest.TestCase):
-    """Le micro entend la piece entiere, pas seulement Matheus.
+    """The mic hears the whole room, not just the person talking to her.
 
-    Les trois premieres phrases sortent telles quelles du journal du 8 aout :
-    un « salut ava » a ouvert l'ecoute pendant un match a la television, et Ava
-    est partie chercher « Thibaut Delphis et les Anéciens » sur le web, puis a
-    enchaine deux relances sur le commentaire.
+    The first three phrasings come straight out of the log for 8 august: a
+    "salut ava" opened the mic during a match on television, and Ava went off to
+    search the web for "Thibaut Delphis et les Anéciens", then followed up twice
+    more on the commentary.
     """
 
     AMBIANCE = (
@@ -212,25 +212,25 @@ class AmbientSpeechTest(unittest.TestCase):
         "souhaitez appuyer sur le panneau avec le bouton",
     )
 
-    def test_un_recit_long_passe_pas_meme_avec_un_mot_interrogatif(self):
-        """Relevé en vrai : « ce que j'adore c'est **quand** on est dans la
-        baignoire » venait d'une vidéo, et « quand » l'a fait passer pour une
-        question. Quarante mots en deux phrases, c'est du récit."""
+    def test_a_long_story_does_not_pass_even_with_a_question_word(self):
+        """Straight from real life: "ce que j'adore c'est **quand** on est dans
+        la baignoire" came from a video, and "quand" made it look like a
+        question. Forty words over two sentences is a story."""
         for phrase in self.RECIT:
             with self.subTest(phrase=phrase[:40]):
                 self.assertTrue(ava.looks_ambient(phrase))
 
-    def test_le_commentaire_de_la_television_est_ecarte(self):
+    def test_television_commentary_is_dropped(self):
         for phrase in self.AMBIANCE:
             with self.subTest(phrase=phrase[:40]):
                 self.assertTrue(ava.looks_ambient(phrase))
 
-    def test_une_vraie_commande_passe_meme_longue(self):
+    def test_a_real_command_gets_through_even_a_long_one(self):
         for phrase in self.COMMANDES:
             with self.subTest(phrase=phrase[:40]):
                 self.assertFalse(ava.looks_ambient(phrase))
 
-    def test_un_suivi_d_ambiance_referme_sans_repondre(self):
+    def test_an_ambient_followup_closes_without_answering(self):
         with patch.object(ava, "execute_command") as run, \
                 patch.object(ava, "transcribe", return_value=self.AMBIANCE[1]), \
                 patch.object(ava, "_record_utterance", return_value=b""), \
@@ -239,29 +239,29 @@ class AmbientSpeechTest(unittest.TestCase):
                 patch.object(ava, "_drain_command_queue"), \
                 patch.object(ava, "_drain_wake_queue"):
             ava._run_continuous_conversation("quelle heure est-il", display_initial=False)
-        # un seul tour : la commande initiale, pas le commentaire du match.
+        # one turn only: the initial command, not the match commentary.
         self.assertEqual(run.call_count, 1)
 
 
 class TimerTest(unittest.TestCase):
-    def test_un_minuteur_ne_retient_pas_ava_au_moment_de_quitter(self):
-        """`threading.Timer` fabrique un thread non-daemon : un minuteur de
-        trente minutes tenait le process en vie trente minutes, et « quitter »
-        semblait ne rien faire."""
+    def test_a_timer_does_not_hold_ava_back_when_quitting(self):
+        """`threading.Timer` makes a non-daemon thread: a thirty-minute timer
+        kept the process alive for thirty minutes, and "quit" looked like it
+        did nothing."""
         timer = ava.start_timer(3600, "test")
         self.addCleanup(timer.cancel)
         self.assertTrue(timer.daemon)
 
 
 class SpokenAccentsTest(unittest.TestCase):
-    """Ce qui est dit a voix haute porte ses accents.
+    """Anything said out loud keeps its accents.
 
-    Exigence explicite de Matheus : la synthese vocale prononce « note » et
-    « noté », « lance » et « lancé » differemment — un accent manquant s'entend,
-    la ou il ne se voit pas dans le code.
+    A hard requirement: the synthesiser pronounces "note" and "noté", "lance"
+    and "lancé" differently — a missing accent is audible, where it goes unseen
+    in the code.
     """
 
-    # participes passes et noms qui perdent leur accent sans que ca se voie.
+    # past participles and nouns that lose their accent without it showing.
     SUSPECTS = ("Meteo", "est termine", "Action terminee", "lance pour",
                 "C'est note", "enregistree", "a ete arretee", "de l'ecran",
                 "termine deja")
@@ -271,7 +271,7 @@ class SpokenAccentsTest(unittest.TestCase):
 
     @classmethod
     def spoken_lines(cls, root: Path):
-        """Les lignes qui fabriquent une phrase destinee a la voix."""
+        """The lines that build a sentence destined for the voice."""
         for name in cls.FILES:
             for number, line in enumerate(
                     (root / name).read_text(encoding="utf-8").splitlines(), 1):
@@ -286,12 +286,12 @@ class SpokenAccentsTest(unittest.TestCase):
                 for where, line in self.spoken_lines(root)
                 for suspect in self.SUSPECTS if suspect in line]
 
-    def test_aucune_phrase_parlee_sans_accent(self):
+    def test_no_spoken_line_is_missing_its_accents(self):
         root = Path(__file__).resolve().parents[1] / "src" / "ava"
         self.assertEqual(self.offenders(root), [])
 
-    def test_le_garde_fou_attrape_bien_une_regression(self):
-        """Un test de forme qui ne peut pas echouer ne protege de rien."""
+    def test_the_guard_really_catches_a_regression(self):
+        """A shape test that cannot fail protects nothing."""
         import tempfile
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -1,4 +1,4 @@
-"""le journal de bord : mesurer sans jamais enregistrer ce qui a été dit."""
+"""the log book: measuring without ever recording what was said."""
 
 import json
 import sys
@@ -41,10 +41,10 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual(self.lines()[0]["route"], "echec")
 
     def test_nothing_spoken_can_be_written_even_by_mistake(self):
-        """Un journal de tout ce qu'on dit à son assistante n'a rien à faire là.
+        """A log of everything you say to your assistant has no business here.
 
-        La garantie est appliquée, pas seulement promise : un appelant distrait
-        qui passerait la commande de l'utilisateur la voit refusée.
+        The guarantee is enforced, not just promised: a distracted caller
+        passing the user's command in gets it refused.
         """
         traces.record("commande", 0.1, route="integre",
                       text="ouvre mon relevé bancaire",

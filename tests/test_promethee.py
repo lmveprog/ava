@@ -53,8 +53,8 @@ class ActiveSessionTests(unittest.TestCase):
 
 class StartSessionTests(unittest.TestCase):
     def test_a_running_session_is_left_alone(self):
-        # ava ne doit jamais relancer par-dessus une session en cours : ca
-        # couperait le compteur de focus en deux.
+        # ava must never start on top of a running session: that would
+        # cut the focus counter in half.
         with patch.object(promethee, "active_session",
                           return_value={"id": "b", "task": "Deep work", "started_at": 0}), \
                 patch.object(promethee, "_launch_and_wait") as launch:

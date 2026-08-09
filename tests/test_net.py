@@ -1,4 +1,4 @@
-"""le coupe-circuit reseau : ce qu'il coupe, et surtout ce qu'il ne coupe pas."""
+"""the network breaker: what it cuts, and above all what it does not."""
 
 import sys
 import unittest
@@ -13,7 +13,7 @@ from ava import net as net
 
 
 class FakeClock:
-    """Un temps qu'on avance a la main : la fenetre dure 45 s, pas les tests."""
+    """A clock we advance by hand: the window lasts 45 s, the tests don't."""
 
     def __init__(self) -> None:
         self.now = 1000.0
@@ -39,29 +39,29 @@ class NetBreakerTest(unittest.TestCase):
         self.assertTrue(net.reachable("voix"))
         self.assertFalse(net.is_offline())
 
-    def test_une_panne_ferme_le_circuit_pour_tout_le_monde(self):
+    def test_one_failure_opens_the_circuit_for_everyone(self):
         net.note_failure("voix", requests.ConnectionError("boum"))
-        # c'est bien un etat partage : la meteo paie deja pour la voix.
+        # this really is shared state: the weather already pays for the voice.
         self.assertFalse(net.reachable("meteo"))
         self.assertFalse(net.reachable("agenda"))
 
-    def test_le_circuit_se_rouvre_apres_la_fenetre(self):
+    def test_the_circuit_closes_again_after_the_window(self):
         net.note_failure("voix", requests.ConnectionError("boum"))
         self.clock.advance(net.OFFLINE_WINDOW_S - 1)
         self.assertFalse(net.reachable("voix"))
         self.clock.advance(2)
         self.assertTrue(net.reachable("voix"))
 
-    def test_un_succes_rouvre_immediatement(self):
+    def test_one_success_closes_it_immediately(self):
         net.note_failure("voix", requests.ConnectionError("boum"))
         net.note_success("voix")
         self.assertTrue(net.reachable("voix"))
 
-    def test_une_erreur_http_n_est_pas_une_coupure(self):
-        """401, 429, 500 : le serveur repond, donc on est en ligne.
+    def test_an_http_error_is_not_an_outage(self):
+        """401, 429, 500: the server answered, so we are online.
 
-        Les confondre couperait ava du reseau pendant une minute a chaque cle
-        expiree ou quota depasse — exactement quand il faut pouvoir reessayer.
+        Confusing the two would take ava off the network for a minute on every
+        expired key or blown quota — exactly when retrying has to be possible.
         """
         for status in (401, 429, 500):
             with self.subTest(status=status):
@@ -85,7 +85,7 @@ class NetBreakerTest(unittest.TestCase):
                 net.note_failure("api", exc)
                 self.assertFalse(net.reachable("api"))
 
-    def test_une_panne_disque_n_est_pas_une_panne_reseau(self):
+    def test_a_disk_error_is_not_a_network_outage(self):
         """`OSError` nu couvre aussi « disque plein » : trop large pour couper."""
         self.assertFalse(net.looks_like_outage(OSError("écriture impossible")))
         net.note_failure("cache", OSError("écriture impossible"))
@@ -102,13 +102,13 @@ class NetBreakerTest(unittest.TestCase):
         self.assertEqual(read, 20)
         self.assertLess(connect, read)
 
-    def test_desactive_le_coupe_circuit_ne_bloque_rien(self):
+    def test_a_disabled_breaker_blocks_nothing(self):
         net.set_enabled(False)
         self.addCleanup(net.set_enabled, True)
         net.note_failure("voix", requests.ConnectionError("boum"))
         self.assertTrue(net.reachable("voix"))
 
-    def test_status_dit_ce_qui_reste(self):
+    def test_status_says_how_long_is_left(self):
         net.note_failure("voix", requests.ConnectionError("boum"))
         state = net.status()
         self.assertFalse(state["online"])
@@ -122,12 +122,12 @@ class AttemptTest(unittest.TestCase):
         net.reset()
         self.addCleanup(net.reset)
 
-    def test_le_bloc_sait_qu_il_ne_sert_a_rien(self):
+    def test_the_block_knows_it_is_pointless(self):
         net.note_failure("voix", requests.ConnectionError("boum"))
         with net.attempt("voix") as online:
             self.assertFalse(online)
 
-    def test_l_exception_n_est_pas_avalee(self):
+    def test_the_exception_is_not_swallowed(self):
         with self.assertRaises(requests.ConnectionError):
             with net.attempt("voix") as online:
                 self.assertTrue(online)
@@ -136,26 +136,26 @@ class AttemptTest(unittest.TestCase):
 
 
 class WiringTest(unittest.TestCase):
-    """Les modules qui sortent du mac passent-ils vraiment par la garde ?"""
+    """Do the modules that leave the mac really go through the guard?"""
 
     def setUp(self) -> None:
         net.set_enabled(True)
         net.reset()
         self.addCleanup(net.reset)
 
-    def test_la_voix_ne_rappelle_pas_le_reseau_une_fois_hors_ligne(self):
+    def test_the_voice_stops_calling_the_network_once_offline(self):
         from ava.audio import voice_tts as voice_tts
         net.note_failure("voix", requests.ConnectionError("boum"))
         with mock.patch.object(voice_tts, "_mistral_chunk") as chunk:
             self.assertIsNone(voice_tts._mistral_audio("une phrase jamais dite"))
         chunk.assert_not_called()
 
-    def test_hors_ligne_la_premiere_phrase_ne_fait_pas_attendre(self):
-        """Le repli local coute 8,9 s de chargement + 9 s de synthese.
+    def test_offline_the_first_sentence_does_not_make_you_wait(self):
+        """The local fallback costs 8.9 s of loading plus 9 s of synthesis.
 
-        Dix-huit secondes de silence apres « ouvre spotify », c'est pire que
-        pas de repli du tout : la voix systeme repond tout de suite pendant que
-        le modele monte derriere.
+        Eighteen seconds of silence after "ouvre spotify" is worse than no
+        fallback at all: the system voice answers right away while the model
+        comes up behind it.
         """
         from ava.audio import voice_tts as voice_tts
         net.note_failure("voix", requests.ConnectionError("boum"))
@@ -169,7 +169,7 @@ class WiringTest(unittest.TestCase):
         local.assert_not_called()          # on n'attend pas le modele froid
         warm.assert_called_once()          # mais on le monte pour la suite
 
-    def test_une_fois_chaud_le_modele_local_reprend_la_main(self):
+    def test_once_warm_the_local_model_takes_over(self):
         from ava.audio import voice_tts as voice_tts
         from pathlib import Path as P
         net.note_failure("voix", requests.ConnectionError("boum"))
@@ -181,14 +181,14 @@ class WiringTest(unittest.TestCase):
             self.assertEqual(voice_tts.synthesize("Deuxième phrase."), P("/tmp/voix.wav"))
         local.assert_called_once()
 
-    def test_l_actu_rend_la_main_tout_de_suite(self):
+    def test_the_news_returns_immediately(self):
         from ava.services import ai_news as ai_news
         net.note_failure("actu", requests.ConnectionError("boum"))
         with mock.patch.object(ai_news, "_feed_items") as feed:
             self.assertEqual(ai_news.fetch_items(), [])
         feed.assert_not_called()
 
-    def test_la_recherche_web_rend_zero_source(self):
+    def test_the_web_search_returns_no_sources(self):
         from ava.services import web_research as web_research
         net.note_failure("recherche", requests.ConnectionError("boum"))
         engine = web_research.WebResearch()
@@ -196,7 +196,7 @@ class WiringTest(unittest.TestCase):
             self.assertEqual(engine.search("météo à Marseille"), ())
         get.assert_not_called()
 
-    def test_l_agenda_le_dit_au_lieu_d_attendre(self):
+    def test_the_calendar_says_so_instead_of_waiting(self):
         from ava.services import google_calendar as google_calendar
         net.note_failure("agenda", requests.ConnectionError("boum"))
         calendar = google_calendar.GoogleCalendar()
@@ -205,11 +205,11 @@ class WiringTest(unittest.TestCase):
                 calendar._call("GET", "/calendars/primary/events")
         request.assert_not_called()
 
-    def test_le_moteur_local_reste_joignable_hors_ligne(self):
-        """LM Studio et Ollama tournent sur la boucle locale.
+    def test_the_local_engine_stays_reachable_offline(self):
+        """LM Studio and Ollama run on the loopback.
 
-        Les mettre derriere le coupe-circuit reviendrait a couper ava de son
-        moteur *local* parce que la box a saute — exactement l'inverse du but.
+        Putting them behind the breaker would cut ava off from her *local*
+        engine because the router died — the exact opposite of the point.
         """
         from ava.brain import conversation as conversation
         net.note_failure("voix", requests.ConnectionError("boum"))
@@ -225,14 +225,14 @@ class WiringTest(unittest.TestCase):
 
 
 class UnderstandingCacheTest(unittest.TestCase):
-    """Le cache d'intentions doit survivre a la coupure : c'est sa raison d'etre."""
+    """The intent cache has to survive an outage — that is its whole reason."""
 
     def setUp(self) -> None:
         net.set_enabled(True)
         net.reset()
         self.addCleanup(net.reset)
 
-    def test_une_tournure_apprise_marche_hors_ligne(self):
+    def test_a_learned_phrasing_works_offline(self):
         from ava.brain import understanding as understanding
         router = understanding.IntentRouter(cache_path=Path("/nonexistent/intents.json"))
         appris = understanding.Understanding("musique_suivant", confidence=0.95)
