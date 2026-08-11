@@ -1564,6 +1564,33 @@ _TRUNCATED = {
 }
 
 
+# what people put before the actual request: connectors ("ensuite", "et puis")
+# and politeness ("tu peux", "est-ce que tu pourrais", "s'il te plait"). vosk
+# and whisper hand them to the router, which then misses the verb underneath —
+# "tu peux fermer spotify" went off to PLAY music.
+_POLITENESS_PREFIXES = (
+    "ensuite", "et puis", "puis", "alors", "donc", "et", "bon", "ok", "okay",
+    "voila", "dis moi", "s il te plait", "sil te plait", "stp", "merci de",
+    "est ce que tu peux", "est ce que tu pourrais", "est ce que tu veux bien",
+    "tu peux", "tu pourrais", "tu veux bien", "peux tu", "pourrais tu",
+    "je veux que tu", "j aimerais que tu", "vas y",
+)
+
+
+def _strip_politeness(command: str) -> str:
+    text = command.strip()
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _POLITENESS_PREFIXES:
+            if text == prefix:
+                return ""
+            if text.startswith(prefix + " "):
+                text = text[len(prefix) + 1:].lstrip()
+                changed = True
+    return text
+
+
 def _mark_route(route: str, network: bool = False) -> None:
     _ROUTE.route = route
     if network:
@@ -1572,7 +1599,7 @@ def _mark_route(route: str, network: bool = False) -> None:
 
 def _dispatch_command(cmd: str) -> None:
     raw = cmd.strip()
-    c = _norm(raw)
+    c = _strip_politeness(_norm(raw)) or _norm(raw)
     if not c:
         speak("Je n'ai pas compris, tu peux répéter ?")
         return
@@ -1639,15 +1666,16 @@ def _dispatch_command(cmd: str) -> None:
     # close or quit one application by name ("ferme la fenêtre"/"ferme l'onglet"
     # are exact computer-use matches and never reach this point; "arrête" stays
     # with the music so "arrête la musique" keeps pausing instead of quitting).
-    for verb in ("ferme ", "fermer ", "quitte ", "quitter "):
-        if c.startswith(verb):
-            target = c.split(verb, 1)[1].strip()
-            app = resolve_app(target)
-            if app:
-                _osascript(f'tell application "{app}" to quit')
-                speak(f"Je ferme {app}.")
-                return
-            break   # not a known app: let the other intents have a look
+    close_match = re.search(
+        r"\b(?:ferme|fermer|quitte|quitter)\s+(?:l application\s+|l app\s+|le\s+|la\s+)?(.+)$",
+        c)
+    if close_match:
+        app = resolve_app(close_match.group(1).strip())
+        if app:
+            _osascript(f'tell application "{app}" to quit')
+            speak(f"Je ferme {app}.")
+            return
+        # not a known app: let the other intents have a look
 
     # Apostrophes and hyphens vary by transcription engine ("qu'est-ce" vs
     # "qu est ce"): memory intents match on a flattened copy.
@@ -1765,7 +1793,7 @@ def _dispatch_command(cmd: str) -> None:
     # in-app search: Ava reads the results and shows her sources, without pushing
     # the user out to a browser unless they click on purpose.
     search_match = re.match(
-        r"^\s*(?:recherche(?:-moi| moi)?|cherche(?:-moi| moi)?|google)\s+(.+)$",
+        r"^\s*(?:recherche[rz]?(?:-moi| moi)?|cherche[rz]?(?:-moi| moi)?|google)\s+(.+)$",
         raw, re.IGNORECASE,
     )
     if search_match:
@@ -2233,6 +2261,32 @@ def _live_recognizer():
         return None
 
 
+def _maybe_refresh_draft(draft: dict, frames: list[bytes]) -> None:
+    # The vosk live sketch reads like word soup ("pas du tout bonne", dixit
+    # Matheus). Every ~1.2 s of speech, one background whisper pass rewrites
+    # the draft properly; the sketch only bridges the very first second.
+    # Single-flight, and _record_utterance joins the worker before the final
+    # pass so two whisper calls never share the gpu.
+    worker = draft["busy"]
+    if worker is not None and worker.is_alive():
+        return
+    now = time.monotonic()
+    if now - draft["at"] < 1.2 or len(frames) < 40:
+        return
+    draft["at"] = now
+    snapshot = b"".join(frames)
+
+    def refresh() -> None:
+        text = (mlx_transcribe(snapshot) or "").strip()
+        if text and _capture_audio.is_set():
+            draft["fresh"] = True          # the sketch stops overwriting us
+            ui("transcript", text, False)
+
+    thread = threading.Thread(target=refresh, daemon=True, name="ava-brouillon")
+    draft["busy"] = thread
+    thread.start()
+
+
 def _record_utterance(max_s: float = 14.0, silence_s: float = 0.68,
                       start_timeout_s: float = 4.5) -> bytes:
     """Capture one utterance off a dedicated queue, publishing a live draft."""
@@ -2241,6 +2295,7 @@ def _record_utterance(max_s: float = 14.0, silence_s: float = 0.68,
     gate = AdaptiveSpeechGate(silence_s=silence_s)
     live = _live_recognizer()
     live_text = ""
+    draft = {"busy": None, "at": 0.0, "fresh": False}
     started_at = time.monotonic()
     _drain_command_queue()
     _capture_audio.set()
@@ -2277,15 +2332,20 @@ def _record_utterance(max_s: float = 14.0, silence_s: float = 0.68,
                         payload = json.loads(live.Result() if accepted else live.PartialResult())
                         candidate = (payload.get("text") if accepted else payload.get("partial")) or ""
                         candidate = candidate.strip()
-                        if candidate and candidate != live_text:
+                        if candidate and candidate != live_text and not draft["fresh"]:
                             live_text = candidate
                             ui("transcript", candidate, False)
                     except Exception:
                         live = None
+                _maybe_refresh_draft(draft, frames)
             if complete or (gate.started and gate.elapsed >= max_s):
                 break
     finally:
         _capture_audio.clear()
+        # never run the final whisper while a draft pass still holds the gpu
+        worker = draft["busy"]
+        if worker is not None:
+            worker.join(timeout=2.0)
     return b"".join(frames)
 
 
@@ -2561,6 +2621,24 @@ def _followup_should_stop(command: str) -> bool:
     }
 
 
+def _looks_like_echo(followup: str, last_spoken: str) -> bool:
+    """Is this "follow-up" just Ava's own sentence caught by the microphone?
+
+    Seen live: she says "On va faire une recherche sur internet", the follow-up
+    window opens, and that exact sentence comes back as the next command. The
+    transcription is near-verbatim, so a high word overlap with what she just
+    said is the tell — a real request shares a couple of words at most.
+    """
+    if not last_spoken:
+        return False
+    said = set(_norm(last_spoken).split())
+    heard = [w for w in _norm(followup).split() if len(w) > 2]
+    if len(heard) < 3 or not said:
+        return False
+    overlap = sum(1 for w in heard if w in said)
+    return overlap / len(heard) >= 0.8
+
+
 def _run_continuous_conversation(command: str, *, display_initial: bool) -> None:
     """Run several turns without asking for the wake word between answers."""
     current = command.strip()
@@ -2578,12 +2656,17 @@ def _run_continuous_conversation(command: str, *, display_initial: bool) -> None
             return
 
         # Ava's audio has just finished: flush her voice and open a follow-up
-        # window straight away. Silence simply closes the session; it doesn't
-        # trigger another spoken answer.
+        # window. `speak` waits for afplay, but the room and the audio device
+        # keep her last words alive a beat longer — 0.16 s of settling let her
+        # own sentence slip into the follow-up and she answered herself.
+        deadline = time.monotonic() + 8.0
+        while speaking() and time.monotonic() < deadline:
+            time.sleep(0.05)
         _capture_audio.clear()
         _drain_command_queue()
         _drain_wake_queue()
-        time.sleep(0.16)
+        time.sleep(0.45)
+        _drain_command_queue()
         set_assistant_state(AvaState.LISTENING, "Tu peux enchainer")
         ui("transcript", "", False)
         followup = transcribe(_record_utterance(
@@ -2598,6 +2681,10 @@ def _run_continuous_conversation(command: str, *, display_initial: bool) -> None
         # room rather than a request, close without answering.
         if looks_ambient(followup):
             print(f"[ava] suivi {turn + 1} ignoré (ambiance) : '{followup[:60]}'")
+            ui("transcript", "", False)
+            return
+        if _looks_like_echo(followup, _last_spoken["text"]):
+            print(f"[ava] suivi {turn + 1} ignoré (écho de ma voix) : '{followup[:60]}'")
             ui("transcript", "", False)
             return
         print(f"[ava] suivi {turn + 1} : '{followup}'")

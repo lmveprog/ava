@@ -34,6 +34,29 @@ class CommandRoutingTests(unittest.TestCase):
         self._vault.cleanup()
         jarvis.ASSISTANT_STATE.dormant()
 
+    def test_politeness_and_connectors_are_stripped(self):
+        self.assertEqual(jarvis._strip_politeness("ensuite tu peux fermer spotify"),
+                         "fermer spotify")
+        self.assertEqual(jarvis._strip_politeness("est ce que tu pourrais ouvrir notion"),
+                         "ouvrir notion")
+        self.assertEqual(jarvis._strip_politeness("ferme spotify"), "ferme spotify")
+
+    def test_polite_close_still_quits_the_app(self):
+        with patch.object(jarvis, "_osascript") as osa, \
+                patch.object(jarvis, "resolve_app", return_value="Spotify"), \
+                patch.object(jarvis, "speak") as speak:
+            jarvis.execute_command("Ensuite, tu peux fermer Spotify")
+        osa.assert_called_once_with('tell application "Spotify" to quit')
+        speak.assert_called_once_with("Je ferme Spotify.")
+
+    def test_own_voice_is_not_a_followup(self):
+        jarvis._last_spoken["text"] = "On va faire une recherche sur internet."
+        self.assertTrue(jarvis._looks_like_echo(
+            "On va faire une recherche sur internet", jarvis._last_spoken["text"]))
+        self.assertFalse(jarvis._looks_like_echo(
+            "ouvre la recherche de spotify", jarvis._last_spoken["text"]))
+        self.assertFalse(jarvis._looks_like_echo("oui", jarvis._last_spoken["text"]))
+
     def test_close_one_app_quits_it_politely(self):
         with patch.object(jarvis, "_osascript") as osa, \
                 patch.object(jarvis, "resolve_app", return_value="Spotify"), \

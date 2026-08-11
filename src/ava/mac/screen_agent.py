@@ -286,11 +286,32 @@ class ScreenAgent:
                        capture_output=True, check=False, timeout=12)
 
     def _click(self, x: int, y: int, double: bool = False) -> None:
-        script = f'tell application "System Events" to click at {{{x}, {y}}}'
-        self._osascript(script)
-        if double:
-            time.sleep(0.12)
+        # CGEvent, not System Events' `click at`: the latter silently does
+        # nothing on modern macOS ("elle prend la main et il ne se passe
+        # rien"). A synthetic mouse event through the HID tap is what real
+        # automation tools post, and it lands everywhere.
+        try:
+            import Quartz
+            point = (float(x), float(y))
+            move = Quartz.CGEventCreateMouseEvent(
+                None, Quartz.kCGEventMouseMoved, point, Quartz.kCGMouseButtonLeft)
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, move)
+            time.sleep(0.05)
+            clicks = 2 if double else 1
+            for click_no in range(1, clicks + 1):
+                for kind in (Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp):
+                    event = Quartz.CGEventCreateMouseEvent(
+                        None, kind, point, Quartz.kCGMouseButtonLeft)
+                    Quartz.CGEventSetIntegerValueField(
+                        event, Quartz.kCGMouseEventClickState, click_no)
+                    Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+                    time.sleep(0.02)
+        except Exception:  # noqa: BLE001 — pyobjc missing: degraded applescript
+            script = f'tell application "System Events" to click at {{{x}, {y}}}'
             self._osascript(script)
+            if double:
+                time.sleep(0.12)
+                self._osascript(script)
 
     def _execute(self, step: dict, scale_x: float, scale_y: float) -> None:
         action = step.get("action", "")
@@ -357,6 +378,8 @@ class ScreenAgent:
                                    step_no - 1, history)
             action = str(step.get("action", ""))
             said = str(step.get("say", "")).strip()
+            if action in ("done", "impossible"):
+                print(f"[agent] {step_no}/{MAX_STEPS} verdict={action}")
             if action == "done":
                 return AgentResult(True, said or "C'est fait.", step_no - 1, history)
             if action == "impossible":
@@ -369,6 +392,8 @@ class ScreenAgent:
                                    step_no - 1, history)
             if said:
                 say(said)
+            print(f"[agent] {step_no}/{MAX_STEPS} {action} "
+                  f"{ {k: v for k, v in step.items() if k != 'say'} }")
             self._execute(step, screen_w / max(1, img_w), screen_h / max(1, img_h))
             history.append(f"{step_no}. {action} — {said or step.get('text', '')}")
             time.sleep(0.8)   # let the interface settle before the next capture
