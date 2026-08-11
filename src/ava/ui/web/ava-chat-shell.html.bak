@@ -1,0 +1,920 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ava — mini assistant</title>
+  <!-- the fluid orb, drawn locally on a canvas: same look as the startup screen, no network -->
+
+  <style>
+    :root{
+      color-scheme:dark;
+      --accent:92,225,230;
+      --level:0;
+      --ink:#f7f8fa;
+      --muted:rgba(247,248,250,.58);
+      --faint:rgba(247,248,250,.34);
+      --panel:rgba(15,17,23,.86);
+      --line:rgba(255,255,255,.085);
+      font-synthesis:none;
+      -webkit-font-smoothing:antialiased;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{width:100%;height:100%;overflow:hidden;background:transparent}
+    body{
+      display:flex;align-items:flex-start;justify-content:flex-end;padding:10px;
+      color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,sans-serif;
+    }
+    button,input,textarea{font:inherit}
+    button{color:inherit}
+    .hidden{display:none!important}
+
+    /* ------- mémoire (vault obsidian) ------- */
+    .memory{margin:0 13px 9px;padding:12px 14px;border-radius:16px;
+      background:rgba(255,255,255,.035);border:1px solid var(--line);
+      max-height:300px;overflow-y:auto;animation:rise .25s ease both}
+    .memory::-webkit-scrollbar{width:0}
+    .mem-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+    .mem-title{display:flex;align-items:center;gap:7px;color:var(--faint);
+      font-size:10px;font-weight:700;letter-spacing:.17em;text-transform:uppercase}
+    .mem-title .pulse{width:6px;height:6px;border-radius:50%;background:rgb(var(--accent));
+      box-shadow:0 0 0 0 rgba(var(--accent),.55);animation:memPulse 1.8s ease-out infinite}
+    @keyframes memPulse{0%{box-shadow:0 0 0 0 rgba(var(--accent),.55)}70%{box-shadow:0 0 0 7px rgba(var(--accent),0)}100%{box-shadow:0 0 0 0 rgba(var(--accent),0)}}
+    .mem-vault{border:0;background:transparent;cursor:pointer;color:rgba(var(--accent),.9);
+      font:inherit;font-size:11px;font-weight:600;letter-spacing:.02em;padding:3px 7px;border-radius:8px}
+    .mem-vault:hover{background:rgba(var(--accent),.1)}
+    .mem-sub{margin:9px 0 5px;color:var(--faint);font-size:10px;font-weight:700;
+      letter-spacing:.14em;text-transform:uppercase}
+    .mem-line{color:var(--muted);font-size:12.5px;line-height:1.55;margin:3px 0}
+    .mem-line b{color:var(--ink);font-weight:560}
+    .mem-empty{color:var(--faint);font-size:12px;font-style:italic}
+    /* le wikilink obsidian, rendu comme une petite gélule d'accent cliquable */
+    .wl{display:inline-block;border:0;cursor:pointer;font:inherit;font-size:11.5px;
+      font-weight:600;color:rgb(var(--accent));padding:1px 8px;margin:0 1px;
+      border-radius:999px;background:rgba(var(--accent),.1);
+      box-shadow:inset 0 0 0 1px rgba(var(--accent),.22);
+      transition:background .2s ease,box-shadow .2s ease,transform .15s ease}
+    .wl:hover{background:rgba(var(--accent),.2);transform:translateY(-1px);
+      box-shadow:inset 0 0 0 1px rgba(var(--accent),.45),0 4px 14px -6px rgba(var(--accent),.6)}
+
+    .shell{
+      position:relative;width:400px;max-height:570px;overflow:hidden;
+      display:flex;flex-direction:column;border-radius:27px;
+      background:
+        radial-gradient(130% 80% at 15% -10%,rgba(var(--accent),.16),transparent 60%),
+        rgba(20,20,24,.62);
+      -webkit-backdrop-filter:blur(24px) saturate(1.35);backdrop-filter:blur(24px) saturate(1.35);
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.07),
+        inset 0 1px 0 0 rgba(255,255,255,.05),
+        0 28px 70px -22px rgba(0,0,0,.9),
+        0 0 0 1px rgba(0,0,0,.25);
+      transform-origin:top right;transition:opacity .28s ease,transform .38s cubic-bezier(.2,.82,.2,1),height .35s ease;
+    }
+    .shell.dormant{opacity:0;transform:translateY(-8px) scale(.94);pointer-events:none}
+    .shell.compact .conversation,.shell.compact .live-card,.shell.compact .hint{display:none}
+    .shell.compact{width:382px}
+
+    .startup-stage{display:none;position:relative;width:100%;height:100%;overflow:hidden}
+    .shell.startup{
+      width:700px;height:500px;max-height:500px;border-radius:34px;
+      background:
+        radial-gradient(78% 100% at 0% 0%,rgba(66,217,222,.20),transparent 60%),
+        radial-gradient(80% 95% at 100% 100%,rgba(130,86,241,.22),transparent 62%),
+        radial-gradient(120% 120% at 50% -20%,rgba(90,120,255,.10),transparent 55%),
+        linear-gradient(150deg,#0d1119,#080a11 60%,#06080e);
+      box-shadow:0 45px 130px -35px rgba(0,0,0,.94),inset 0 1px rgba(255,255,255,.07);
+    }
+    .shell.startup>:not(.startup-stage){display:none!important}
+    .shell.startup .startup-stage{display:grid;grid-template-columns:41% 59%;animation:startupIn .7s cubic-bezier(.2,.8,.2,1) both}
+    /* grain subtil : profondeur premium */
+    .startup-stage::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.5;mix-blend-mode:overlay;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E")}
+
+    /* ------- colonne gauche : identite + meteo ------- */
+    /* overflow:clip -> meme si un halo respire un peu trop, il ne franchit
+       jamais le filet ni la colonne de texte. */
+    .startup-left{position:relative;z-index:1;display:flex;flex-direction:column;min-width:0;overflow:clip;padding:30px 24px 28px 32px}
+    .startup-left::after{content:"";position:absolute;top:26px;bottom:26px;right:0;width:1px;
+      background:linear-gradient(180deg,transparent,rgba(255,255,255,.12),transparent)}
+    .startup-brand{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;color:rgba(247,248,250,.32);
+      font-size:9px;font-weight:750;letter-spacing:.2em;text-transform:uppercase}
+    .startup-brand::before{content:"";width:5px;height:5px;border-radius:50%;background:#5ce1e6;box-shadow:0 0 10px #5ce1e6}
+    /* Orbe vocal local, inspire du pattern VoiceOrb d'assistant-ui. */
+    /* L'orbe et son halo tiennent dans UNE boite carree : avant, le noyau ne
+       mesurait que 172 px alors que le halo en faisait 230 en absolu, donc la
+       mise en page n'en reservait pas la place et le halo debordait sur le
+       filet de separation et sur la colonne de droite. Tout est desormais
+       exprime en % d'un cadre unique, qui retrecit si la colonne retrecit. */
+    .startup-voice-wrap{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;min-height:0;min-width:0;isolation:isolate}
+    .startup-orb-core{position:relative;width:min(212px,100%);aspect-ratio:1;display:grid;place-items:center;flex:0 0 auto}
+    .startup-orb-core::before{content:"";position:absolute;inset:0;border-radius:50%;
+      background:radial-gradient(closest-side,rgba(70,217,223,.16),transparent 72%);filter:blur(6px)}
+    .startup-orb-ring{position:absolute;width:82%;height:82%;border-radius:50%;
+      border:1px solid rgba(131,239,242,.16);
+      box-shadow:0 0 0 1px rgba(255,255,255,.02) inset,0 0 40px rgba(70,217,223,.10) inset;
+      animation:spin 22s linear infinite}
+    .startup-orb-ring::before{content:"";position:absolute;top:-3px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;
+      background:#8ff2f4;box-shadow:0 0 14px #5ce1e6}
+    .startup-voice-canvas{position:relative;width:86%;height:86%;filter:saturate(1.1)}
+    .startup-voice-caption{display:inline-flex;align-items:center;gap:7px;
+      color:rgba(247,248,250,.56);font-size:9px;font-weight:660;letter-spacing:.18em;text-transform:uppercase}
+    .startup-voice-caption::before{content:"";width:5px;height:5px;border-radius:50%;background:#63edb9;box-shadow:0 0 12px #63edb9;animation:pulse .9s ease-in-out infinite alternate}
+    .shell[data-state="speaking"] .startup-orb-ring{border-color:rgba(99,237,185,.34)}
+
+    .startup-greeting{position:relative;z-index:2}
+    .startup-hello{color:rgba(255,255,255,.42);font-size:10.5px;font-weight:680;letter-spacing:.22em;text-transform:uppercase}
+    .startup-name{margin-top:3px;font-size:37px;font-weight:640;letter-spacing:-.03em;line-height:1;
+      background:linear-gradient(180deg,#ffffff,#c5d4dd);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .startup-meta{display:flex;gap:8px;align-items:center;margin-top:9px;color:rgba(247,248,250,.56);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.09em}
+    .startup-meta b{color:rgba(255,255,255,.82);font-weight:640}
+    .startup-meta span+span::before{content:"";display:inline-block;width:3px;height:3px;margin-right:8px;border-radius:50%;background:rgba(92,225,230,.8);vertical-align:middle}
+
+    /* meteo = illustration animee (Meteocons), bas-gauche */
+    .startup-weather{display:flex;align-items:center;gap:13px;margin-top:16px;padding:12px 14px;border-radius:18px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(135deg,rgba(120,180,255,.09),rgba(151,126,255,.05) 62%,rgba(255,255,255,.015))}
+    .startup-wx-glyph{width:56px;height:56px;flex:0 0 auto;filter:drop-shadow(0 6px 15px rgba(120,190,255,.3))}
+    .startup-wx-glyph svg{width:100%;height:100%;display:block;overflow:visible}
+    .startup-wx-main{display:flex;flex-direction:column;min-width:0}
+    .startup-wx-temp{font-size:27px;font-weight:620;letter-spacing:-.03em;line-height:1;
+      background:linear-gradient(180deg,#fff,#cfe6ee);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .startup-wx-desc{margin-top:3px;color:rgba(255,255,255,.6);font-size:11px;font-weight:520;text-transform:capitalize}
+    .startup-wx-range{margin-left:auto;align-self:center;display:flex;flex-direction:column;gap:3px;text-align:right;
+      color:rgba(247,248,250,.56);font-size:11px;font-weight:560;white-space:nowrap}
+    .startup-wx-range b{color:#fff;font-weight:660}
+
+    /* ------- colonne droite : le brief ------- */
+    .startup-right{position:relative;z-index:1;display:flex;flex-direction:column;gap:11px;padding:28px 30px 22px 28px;min-height:0}
+    .startup-section-label{display:flex;align-items:center;gap:8px;color:rgba(92,225,230,.85);font-size:9px;font-weight:770;letter-spacing:.18em;text-transform:uppercase}
+    .startup-pulse{width:6px;height:6px;border-radius:50%;background:#5ce1e6;box-shadow:0 0 13px #5ce1e6;animation:pulse 1s ease-in-out infinite alternate}
+    .startup-news{padding:14px 17px 15px;border:1px solid rgba(92,225,230,.14);border-radius:19px;
+      background:linear-gradient(150deg,rgba(92,225,230,.08),rgba(255,255,255,.018))}
+    .startup-news-title{margin-top:9px;color:rgba(255,255,255,.94);font-size:16.5px;font-weight:600;line-height:1.32;letter-spacing:-.02em}
+    .startup-news-meta{display:flex;align-items:center;gap:8px;margin-top:10px;color:rgba(247,248,250,.32);font-size:10px;font-weight:560}
+    .startup-source{padding:0;border:0;background:transparent;color:rgba(92,225,230,.9);cursor:pointer;text-decoration:underline;text-decoration-color:rgba(92,225,230,.3);text-underline-offset:3px}
+    .startup-quote{position:relative;padding:1px 4px 1px 16px;color:rgba(255,255,255,.68);
+      font-family:"New York",Georgia,serif;font-size:14px;font-style:italic;line-height:1.48}
+    .startup-quote::before{content:"";position:absolute;left:0;top:3px;bottom:3px;width:2px;border-radius:2px;
+      background:linear-gradient(180deg,#5ce1e6,#977eff)}
+    .startup-quote-author{display:block;margin-top:5px;font-style:normal;font-family:inherit;
+      font-size:11px;letter-spacing:.04em;color:rgba(255,255,255,.42)}
+    /* transcript : "ce qu'ava te dit", revele mot a mot */
+    .startup-brief{flex:1;min-height:0;display:flex;flex-direction:column;gap:7px}
+    .startup-brief-text{overflow:auto;color:rgba(255,255,255,.72);font-size:12.5px;line-height:1.5;padding-right:4px;
+      -webkit-mask-image:linear-gradient(180deg,#000 82%,transparent);mask-image:linear-gradient(180deg,#000 82%,transparent)}
+    .startup-brief-text::-webkit-scrollbar{width:0}
+    .startup-brief-text .tok{display:inline-block;opacity:0;animation:tokIn .5s cubic-bezier(.2,.8,.2,1) both}
+    .startup-bottom{margin-top:6px;display:flex;align-items:center;gap:16px}
+    .startup-progress{position:relative;height:3px;flex:1;overflow:hidden;border-radius:9px;background:rgba(255,255,255,.07)}
+    .startup-progress::after{content:"";display:block;width:100%;height:100%;transform-origin:left;background:linear-gradient(90deg,#5ce1e6,#977eff);animation:startupProgress var(--startup-duration,9s) linear forwards}
+    .startup-stage.loading .startup-progress::after{animation:startupLoading 1.6s ease-in-out infinite}
+    .startup-skip{padding:7px 14px;border:0;border-radius:11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06);color:rgba(247,248,250,.56);font-size:11px;font-weight:600;cursor:pointer}
+
+    .topbar{display:flex;align-items:center;gap:12px;padding:12px 12px 8px 13px;min-height:84px}
+    .avatar{position:relative;width:66px;height:66px;flex:0 0 66px;isolation:isolate}
+    .avatar::before{
+      content:"";position:absolute;inset:4px;border-radius:50%;z-index:-1;
+      background:rgba(var(--accent),calc(.10 + var(--level)*.26));
+      filter:blur(calc(10px + var(--level)*8px));transform:scale(calc(1 + var(--level)*.18));
+      transition:background .35s ease,transform .08s linear;
+    }
+    #orbCanvas,.fallback-orb{position:absolute;inset:0;width:66px;height:66px}
+    #orbCanvas{z-index:2;opacity:0;transition:opacity .3s ease}
+    #orbCanvas.ready{opacity:1}
+    .avatar.orb-ready .fallback-orb{opacity:0}
+    .fallback-orb{
+      border-radius:50%;overflow:hidden;transition:opacity .25s ease,transform .12s ease;
+      transform:scale(calc(1 + var(--level)*.07));
+      background:
+        radial-gradient(circle at 34% 28%,rgba(255,255,255,.8) 0 4%,transparent 17%),
+        radial-gradient(circle at 66% 70%,rgba(255,255,255,.18),transparent 34%),
+        conic-gradient(from 35deg,#174b62,#46d3d9,#713cbb,#15243d,#174b62);
+      box-shadow:inset -8px -10px 18px rgba(0,0,0,.38),inset 5px 5px 14px rgba(255,255,255,.16);
+      animation:breathe 3.8s ease-in-out infinite;
+    }
+    .fallback-orb::before,.fallback-orb::after{
+      content:"";position:absolute;top:28px;width:5px;height:7px;border-radius:50%;background:#10141c;
+      box-shadow:0 0 0 1px rgba(255,255,255,.18);animation:blink 5.2s infinite;
+    }
+    .fallback-orb::before{left:21px}.fallback-orb::after{right:21px}
+    [data-state="listening"] .fallback-orb{animation:listen .8s ease-in-out infinite alternate}
+    [data-state="thinking"] .fallback-orb{animation:spin 2.2s linear infinite}
+    [data-state="speaking"] .fallback-orb{animation:speak .5s ease-in-out infinite alternate}
+    [data-state="error"] .fallback-orb{filter:saturate(.5) hue-rotate(125deg)}
+    @keyframes breathe{50%{transform:scale(.95)}}
+    @keyframes blink{0%,45%,48%,100%{transform:scaleY(1)}46%,47%{transform:scaleY(.08)}}
+    @keyframes listen{to{transform:scale(1.08);filter:saturate(1.25)}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes speak{to{transform:scale(1.09,.94)}}
+
+    .identity{min-width:0;flex:1}
+    .eyebrow{display:flex;align-items:center;gap:7px;margin-bottom:4px;color:var(--faint);font-size:10px;font-weight:700;letter-spacing:.17em;text-transform:uppercase}
+    .state-dot{width:6px;height:6px;border-radius:50%;background:rgb(var(--accent));box-shadow:0 0 12px rgba(var(--accent),.8)}
+    .status{overflow:hidden;color:var(--ink);font-size:16px;font-weight:610;letter-spacing:-.015em;text-overflow:ellipsis;white-space:nowrap}
+    .substatus{margin-top:3px;color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .top-actions{display:flex;gap:4px;align-self:flex-start;margin-top:3px}
+    .icon-btn{
+      width:30px;height:30px;display:grid;place-items:center;border:0;border-radius:10px;
+      background:transparent;color:var(--faint);cursor:pointer;transition:.2s ease;
+    }
+    .icon-btn:hover{color:var(--ink);background:rgba(255,255,255,.065)}
+    .icon-btn:focus-visible,.choice:focus-visible,.send:focus-visible,.mic:focus-visible{outline:2px solid rgba(var(--accent),.9);outline-offset:2px}
+
+    .live-card{
+      margin:0 13px 7px;padding:11px 13px;border:1px solid rgba(var(--accent),.16);border-radius:15px;
+      background:rgba(var(--accent),.065);animation:rise .25s ease both;
+    }
+    .live-label{margin-bottom:5px;color:rgba(var(--accent),.86);font-size:9.5px;font-weight:750;letter-spacing:.16em;text-transform:uppercase}
+    .live-text{min-height:18px;color:rgba(255,255,255,.82);font-size:13.5px;line-height:1.4}
+    .caret{display:inline-block;width:5px;height:14px;margin-left:3px;border-radius:3px;background:rgb(var(--accent));vertical-align:-2px;animation:pulse .7s ease-in-out infinite alternate}
+
+    .conversation{
+      min-height:118px;max-height:278px;overflow-y:auto;padding:4px 13px 9px;
+      display:flex;flex-direction:column;gap:9px;scroll-behavior:smooth;
+    }
+    .conversation::-webkit-scrollbar{width:5px}.conversation::-webkit-scrollbar-thumb{background:rgba(255,255,255,.11);border-radius:9px}
+    .message{display:flex;align-items:flex-end;gap:8px;animation:rise .3s cubic-bezier(.2,.8,.2,1) both}
+    .message.user{justify-content:flex-end}
+    .bubble{max-width:84%;padding:9px 11px;border-radius:15px;font-size:13px;line-height:1.42;white-space:pre-wrap;word-break:break-word}
+    .assistant .bubble{border:1px solid var(--line);border-bottom-left-radius:5px;background:rgba(255,255,255,.052);color:rgba(255,255,255,.84)}
+    .user .bubble{border-bottom-right-radius:5px;background:rgb(var(--accent));color:#071013;font-weight:535}
+    /* streaming text (assistant-ui) : les mots "atterrissent" dans l'accent puis se fondent */
+    .assistant .bubble .tok{display:inline-block;opacity:0;animation:tokIn .5s cubic-bezier(.2,.8,.2,1) both}
+    /* coupee en cours de phrase : le texte reste lisible, mais on voit ou la
+       voix s'est arretee. sans ca on lit une reponse entiere qu'on n'a jamais
+       entendue, et rien ne dit qu'il en manque la moitie. */
+    .assistant .bubble .tok.unsaid{animation:none;opacity:.26}
+    .assistant .bubble.cut::after{content:"coupée";display:inline-block;margin-left:.5em;
+      font-size:.68em;letter-spacing:.04em;text-transform:uppercase;opacity:.5;
+      vertical-align:baseline;transform:translateY(-.1em)}
+    @keyframes tokIn{0%{opacity:0;filter:blur(5px);transform:translateY(3px);color:rgb(var(--accent))}40%{opacity:1;filter:blur(0);transform:none;color:rgb(var(--accent))}100%{opacity:1;color:inherit}}
+    .message.error .bubble{border-color:rgba(255,107,126,.25);background:rgba(255,107,126,.09);color:#ffc1c9}
+    .visual{
+      width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;border:1px solid rgba(var(--accent),.15);border-radius:13px;
+      color:rgb(var(--accent));background:linear-gradient(145deg,rgba(var(--accent),.15),rgba(var(--accent),.035));
+    }
+    .visual svg{width:20px;height:20px}
+    .intro{margin:3px 0 4px;padding:2px 4px;color:var(--muted);font-size:12.5px;line-height:1.48}
+    .intro strong{color:var(--ink);font-weight:620}
+    .source-list{display:flex;flex-wrap:wrap;gap:6px;padding-left:46px;animation:rise .3s ease both}
+    .source-chip{
+      max-width:100%;padding:6px 9px;border:1px solid rgba(var(--accent),.2);border-radius:10px;
+      overflow:hidden;background:rgba(var(--accent),.07);color:rgba(var(--accent),.92);
+      font-size:10.5px;text-decoration:none;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;
+    }
+    .source-chip:hover{border-color:rgba(var(--accent),.42);background:rgba(var(--accent),.12)}
+    .capture-card{position:relative;margin-left:46px;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.035);animation:rise .3s ease both}
+    .capture-card img{display:block;width:100%;max-height:148px;object-fit:cover;object-position:center}
+    .capture-caption{padding:7px 9px;color:var(--faint);font-size:10px}
+
+    .choices{margin:0 13px 10px;padding:11px;border:1px solid rgba(255,255,255,.09);border-radius:16px;background:rgba(255,255,255,.035);animation:rise .3s ease both}
+    .choice-prompt{margin-bottom:9px;color:var(--muted);font-size:12px;line-height:1.4}
+    .choice-row{display:flex;gap:8px}
+    .choice{flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.04);font-size:12.5px;font-weight:620;cursor:pointer;transition:.2s ease}
+    .choice.yes{border-color:rgba(var(--accent),.3);background:rgba(var(--accent),.14);color:rgb(var(--accent))}
+    .choice:hover{transform:translateY(-1px);filter:brightness(1.16)}
+
+    .composer{display:flex;align-items:flex-end;gap:7px;margin:0 11px 10px;padding:7px;border:1px solid var(--line);border-radius:17px;background:rgba(4,6,10,.48);transition:border-color .2s,box-shadow .2s}
+    .composer:focus-within{border-color:rgba(var(--accent),.38);box-shadow:0 0 0 3px rgba(var(--accent),.07)}
+    .composer textarea{min-width:0;flex:1;max-height:78px;resize:none;border:0;outline:0;background:transparent;color:var(--ink);font-size:13px;line-height:1.42;padding:7px 4px}
+    .composer textarea::placeholder{color:rgba(255,255,255,.3)}
+    .mic,.send{width:34px;height:34px;flex:0 0 34px;display:grid;place-items:center;border:0;border-radius:11px;cursor:pointer;transition:.2s ease}
+    .mic{background:rgba(255,255,255,.055);color:var(--muted)}
+    .mic:hover,.mic.active{color:rgb(var(--accent));background:rgba(var(--accent),.13)}
+    .send{background:rgb(var(--accent));color:#061013;box-shadow:0 7px 22px -10px rgba(var(--accent),.9)}
+    .send:hover{transform:translateY(-1px);filter:brightness(1.08)}
+    .send:disabled{opacity:.35;cursor:default;transform:none}
+    .hint{padding:0 16px 12px;color:var(--faint);font-size:10.5px;text-align:center}
+    kbd{padding:1px 5px;border:1px solid var(--line);border-radius:5px;background:rgba(255,255,255,.04);font-size:9.5px}
+
+    .boot{margin:0 13px 10px;padding:13px;border:1px solid var(--line);border-radius:17px;background:rgba(255,255,255,.035)}
+    .boot-title{font-size:13px;font-weight:650}.boot-sub{margin-top:2px;color:var(--faint);font-size:10.5px}
+    .boot-rows{display:flex;flex-direction:column;gap:6px;margin-top:10px}.boot-row{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+    .boot-check{width:15px;height:15px;display:grid;place-items:center;border:1px solid rgba(var(--accent),.3);border-radius:50%;font-size:9px;color:transparent}
+    .boot-row.done .boot-check{color:#071013;background:rgb(var(--accent))}.boot-row.done{color:var(--ink)}
+
+    .settings{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;background:rgba(16,18,24,.98);animation:fade .2s ease both}
+    .set-head{display:flex;align-items:center;justify-content:space-between;padding:17px 18px 12px;border-bottom:1px solid var(--line)}
+    .set-title{font-size:15px;font-weight:650}.set-body{overflow-y:auto;display:flex;flex-direction:column;gap:13px;padding:14px 18px}
+    .field{display:flex;flex-direction:column;gap:6px}.field>span{color:var(--faint);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+    .field input[type=text],.field input[type=password],.field textarea,.field select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:10px;outline:0;background:rgba(255,255,255,.04);color:var(--ink);font-size:12.5px;resize:vertical}
+    .field input:focus,.field textarea:focus,.field select:focus{border-color:rgba(var(--accent),.45)}
+    /* connecteurs facon "integrations" : une carte par service branche */
+    .connector{border:1px solid var(--line);border-radius:14px;padding:12px;background:rgba(255,255,255,.025);display:flex;flex-direction:column;gap:9px}
+    .conn-head{display:flex;align-items:center;gap:10px}
+    .conn-logo{width:28px;height:28px;flex:0 0 28px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-size:14px;color:#0d0f14;background:conic-gradient(from -45deg,#ea4335,#fbbc05,#34a853,#4285f4,#ea4335)}
+    .conn-text{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+    .conn-text strong{font-size:13px;font-weight:650}
+    .conn-text span{color:var(--faint);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .conn-text span.ok{color:#65dfa9}.conn-text span.err{color:#ff8c99}
+    .conn-hint{margin:0;color:var(--faint);font-size:11px;line-height:1.45}
+    .conn-hint a{color:rgb(var(--accent))}
+    .connector details{border-top:1px solid var(--line);padding-top:9px;display:flex;flex-direction:column;gap:9px}
+    .connector summary{cursor:pointer;color:var(--faint);font-size:11px;font-weight:600;list-style:none}
+    .connector summary::-webkit-details-marker{display:none}
+    .connector summary::before{content:"⌄ ";display:inline-block}
+    .connector details[open] summary::before{content:"⌃ "}
+    .switch{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:12.5px}.switch input{accent-color:rgb(var(--accent))}
+    .voice-try{display:flex;align-items:center;gap:10px}
+    .voice-try span{color:var(--faint);font-size:11px}
+    .set-note{min-height:15px;color:var(--faint);font-size:11px}.set-note.ok{color:#65dfa9}.set-note.err{color:#ff8c99}
+    .set-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:auto;padding:12px 18px 17px;border-top:1px solid var(--line)}
+    .btn{padding:8px 13px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;font-weight:620;cursor:pointer}.btn.primary{border-color:transparent;background:rgb(var(--accent));color:#071013}
+
+    @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+    @keyframes pulse{to{opacity:.18}}
+    @keyframes fade{from{opacity:0}to{opacity:1}}
+    @keyframes startupIn{from{opacity:0;transform:scale(.965) translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes voiceHalo{0%,100%{transform:scale(.94);opacity:.36}50%{transform:scale(1.04);opacity:.95}}
+    @keyframes startupProgress{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+    @keyframes startupLoading{0%{transform:translateX(-100%) scaleX(.35)}100%{transform:translateX(150%) scaleX(.5)}}
+    @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+  </style>
+</head>
+<body>
+  <main class="shell" id="shell" data-state="idle" aria-label="Ava, mini assistant">
+    <section class="startup-stage loading" id="startupStage" aria-label="Démarrage d'Ava">
+      <div class="startup-left">
+        <div class="startup-brand">Ava · Personal Intelligence</div>
+        <div class="startup-voice-wrap" role="img" aria-label="Ava">
+          <div class="startup-orb-core">
+            <div class="startup-orb-ring"></div>
+            <canvas class="startup-voice-canvas" id="startupVoiceOrb" width="344" height="344" aria-hidden="true"></canvas>
+          </div>
+          <div class="startup-voice-caption">Assistante vocale</div>
+        </div>
+        <div class="startup-greeting">
+          <div class="startup-hello" id="startupHello">Bonjour</div><div class="startup-name" id="startupName">Mathieu</div>
+          <div class="startup-meta"><span id="startupCity">Marseille</span><span id="startupDate"></span></div>
+        </div>
+        <div class="startup-weather hidden" id="startupWeather">
+          <span class="startup-wx-glyph" id="startupWxGlyph"></span>
+          <span class="startup-wx-main">
+            <span class="startup-wx-temp" id="startupWxTemp"></span>
+            <span class="startup-wx-desc" id="startupWxDesc"></span>
+          </span>
+          <span class="startup-wx-range" id="startupWxRange"></span>
+        </div>
+      </div>
+      <div class="startup-right">
+        <div class="startup-section-label"><span class="startup-pulse"></span>Signal IA du moment</div>
+        <article class="startup-news">
+          <div class="startup-news-title" id="startupNews">Recherche d’une actualité IA pertinente…</div>
+          <div class="startup-news-meta"><button class="startup-source" id="startupSource">Vérification en cours</button><span id="startupPublished"></span></div>
+        </article>
+        <blockquote class="startup-quote" id="startupQuote">Ton prochain niveau commence par ce que tu fais maintenant.</blockquote>
+        <div class="startup-brief hidden" id="startupBriefWrap">
+          <div class="startup-section-label"><span class="startup-pulse"></span>Ce qu'Ava te dit</div>
+          <p class="startup-brief-text" id="startupBrief"></p>
+        </div>
+        <div class="startup-bottom"><div class="startup-progress"></div><button class="startup-skip" id="startupSkip">Passer</button></div>
+      </div>
+    </section>
+    <header class="topbar">
+      <div class="avatar" id="avatar" aria-hidden="true">
+        <div class="fallback-orb"></div>
+        <canvas id="orbCanvas" width="132" height="132"></canvas>
+      </div>
+      <div class="identity">
+        <div class="eyebrow"><span class="state-dot"></span><span id="kicker">Ava</span></div>
+        <div class="status" id="status">Prête</div>
+        <div class="substatus" id="substatus">Écris ou appuie sur le micro</div>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" id="collapse" aria-label="Réduire" title="Réduire">
+          <svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 10 4 4 4-4"/></svg>
+        </button>
+        <button class="icon-btn" id="memoryBtn" aria-label="Mémoire" title="Mémoire (vault Obsidian)">
+          <svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v14H6.5a2.5 2.5 0 0 0 0 5H19"/><path d="M9 8h7M9 11.5h4.5"/></svg>
+        </button>
+        <button class="icon-btn" id="gear" aria-label="Réglages" title="Réglages">
+          <svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.5 1A7 7 0 0 0 14.7 6L14.4 3h-4.8L9.3 6a7 7 0 0 0-1.7 1.1l-2.5-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.5-1A7 7 0 0 0 9.3 18l.3 3h4.8l.3-3a7 7 0 0 0 1.7-1.1l2.5 1 2-3.4-2-1.5a7 7 0 0 0 .1-1Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="memory hidden" id="memoryPanel">
+      <div class="mem-head">
+        <span class="mem-title"><span class="pulse"></span> Mémoire</span>
+        <button class="mem-vault" id="memVault">Ouvrir dans Obsidian ↗</button>
+      </div>
+      <div id="memBody"><div class="mem-empty">Chargement…</div></div>
+    </section>
+
+    <section class="live-card hidden" id="live" aria-live="polite">
+      <div class="live-label">Transcription en direct</div>
+      <div class="live-text"><span id="liveText"></span><span class="caret"></span></div>
+    </section>
+
+    <section class="conversation" id="messages" aria-live="polite">
+      <p class="intro" id="intro"><strong>Bonjour.</strong> Je suis prête : parle-moi ou écris directement ici.</p>
+    </section>
+
+    <section class="boot hidden" id="boot">
+      <div class="boot-title">Ava prépare ton espace</div>
+      <div class="boot-sub" id="bootSub">Ouverture de tes applications…</div>
+      <div class="boot-rows" id="bootRows"></div>
+    </section>
+
+    <section class="choices hidden" id="choices" aria-label="Confirmation">
+      <div class="choice-prompt" id="choicePrompt"></div>
+      <div class="choice-row">
+        <button class="choice yes" id="choiceYes">Oui, confirmer</button>
+        <button class="choice" id="choiceNo">Non</button>
+      </div>
+    </section>
+
+    <form class="composer" id="composer">
+      <button class="mic" id="mic" type="button" aria-label="Parler à Ava" title="Parler">
+        <svg viewBox="0 0 24 24" width="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6"/></svg>
+      </button>
+      <textarea id="input" rows="1" maxlength="4000" aria-label="Écrire à Ava" placeholder="Demande quelque chose à Ava…"></textarea>
+      <button class="send" id="send" type="submit" aria-label="Envoyer" disabled>
+        <svg viewBox="0 0 24 24" width="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+    <div class="hint">Entrée pour envoyer · <kbd>⇧ Entrée</kbd> pour une ligne</div>
+
+    <section class="settings hidden" id="settings" aria-label="Réglages d'Ava">
+      <header class="set-head"><span class="set-title">Réglages d’Ava</span><button class="icon-btn" id="setClose" aria-label="Fermer">✕</button></header>
+      <div class="set-body">
+        <label class="field"><span>Ton prénom</span><input id="fName" type="text" placeholder="Ton prénom"></label>
+        <label class="field"><span>Ville pour la météo</span><input id="fCity" type="text" placeholder="Paris"></label>
+        <label class="field"><span>Moteur de voix</span><select id="fEngine">
+          <option value="mistral">Marie — voix française native, la plus rapide</option>
+          <option value="chatterbox">Chatterbox v3 — local, clone la voix de référence</option>
+          <option value="elevenlabs">ElevenLabs — en ligne, consomme du crédit</option>
+          <option value="system">Voix système macOS — dépannage</option>
+        </select></label>
+        <label class="field"><span>Extrait de référence (.wav ~10 s)</span><input id="fReference" type="text" placeholder="voices/laura_ref.wav"></label>
+        <div class="voice-try"><button class="btn" id="voiceTest" type="button">Écouter un extrait</button><span id="voiceTestNote"></span></div>
+        <label class="field"><span>Voice ID ElevenLabs</span><input id="fVoice" type="text" placeholder="Optionnel"></label>
+
+        <div class="connector" id="googleCard">
+          <div class="conn-head">
+            <span class="conn-logo" aria-hidden="true">G</span>
+            <div class="conn-text"><strong>Google Agenda</strong><span id="googleState">Vérification…</span></div>
+            <button class="btn" id="googleBtn" type="button">Se connecter</button>
+          </div>
+          <p class="conn-hint" id="googleHint">Ava pourra consulter ton agenda et y écrire des rendez-vous.</p>
+          <details id="googleKeys">
+            <summary>Identifiants du client OAuth</summary>
+            <label class="field"><span>Client ID</span><input id="fGid" type="text" placeholder="…apps.googleusercontent.com"></label>
+            <label class="field"><span>Client secret</span><input id="fGsecret" type="password" placeholder="GOCSPX-…"></label>
+            <p class="conn-hint">Crée un client OAuth de type « Application de bureau » sur <a href="#" id="googleConsole">console.cloud.google.com</a>, active l'API Google Calendar, puis enregistre.</p>
+          </details>
+        </div>
+        <label class="field"><span>Sensibilité du double clap</span><input id="fSens" type="range" min="0" max="100" step="1"></label>
+        <label class="field"><span>Phrases de réveil — une par ligne</span><textarea id="fPhrases" rows="2"></textarea></label>
+        <label class="field"><span>Apps du matin — Nom, tl/tr/bl/br</span><textarea id="fApps" rows="3"></textarea></label>
+        <label class="switch"><span>Afficher les illustrations utiles</span><input id="fIllustrations" type="checkbox"></label>
+        <label class="switch"><span>Enchaîner les réponses sans « OK Ava »</span><input id="fContinuous" type="checkbox"></label>
+        <label class="switch"><span>Animation centrale au démarrage</span><input id="fStartup" type="checkbox"></label>
+        <label class="switch"><span>Ouvrir le mini-plugin déplié</span><input id="fExpanded" type="checkbox"></label>
+        <label class="switch"><span>Cacher Ava au démarrage</span><input id="fHidden" type="checkbox"></label>
+        <div class="set-note" id="setNote"></div>
+      </div>
+      <footer class="set-foot"><button class="btn" id="setCancel">Annuler</button><button class="btn primary" id="setSave">Enregistrer</button></footer>
+    </section>
+  </main>
+
+  <script>
+  (()=>{
+    "use strict";
+    const $=id=>document.getElementById(id);
+    const shell=$("shell"),messages=$("messages"),input=$("input"),send=$("send"),mic=$("mic");
+    // palette de l'artifact « Ava — overlay » : un repos acier discret, la
+    // couleur n'arrive qu'avec un état — c'est elle qui raconte ce qui se passe.
+    const STATES={
+      idle:{rgb:[122,134,150],kicker:"Ava",status:"Prête",sub:"Écris ou appuie sur le micro"},
+      listening:{rgb:[46,208,224],kicker:"À l’écoute",status:"Je t’écoute",sub:"Parle naturellement, je détecte la fin"},
+      thinking:{rgb:[139,124,246],kicker:"Réflexion",status:"Je m’en occupe",sub:"Analyse de ta demande…"},
+      speaking:{rgb:[67,224,160],kicker:"Ava répond",status:"Voici",sub:"Tu peux déjà préparer la suite"},
+      action:{rgb:[245,166,35],kicker:"Action",status:"J’agis sur ton Mac",sub:"Exécution en cours…"},
+      booting:{rgb:[245,166,35],kicker:"Démarrage",status:"Je prépare ton espace",sub:"Quelques secondes…"},
+      error:{rgb:[255,105,126],kicker:"Petit souci",status:"Je n’ai pas pu terminer",sub:"Réessaie ou écris la demande"}
+    };
+    let currentState="idle",showIllustrations=true,orbAnimation=null,orbState=null,startupTimer=null,startupSourceUrl="";
+
+    function setAccent(rgb){document.documentElement.style.setProperty("--accent",rgb.join(","))}
+    function setState(name,label){
+      const state=STATES[name]||STATES.idle;currentState=name in STATES?name:"idle";
+      shell.dataset.state=currentState;shell.classList.remove("dormant");setAccent(state.rgb);
+      $("kicker").textContent=state.kicker;$("status").textContent=label||state.status;$("substatus").textContent=state.sub;
+      mic.classList.toggle("active",currentState==="listening");syncRive();
+      if(["listening","thinking","speaking","action","error","booting"].includes(currentState))shell.classList.remove("compact");
+    }
+
+    const iconPaths={
+      weather:'<path d="M7 17.5h9.5a3.5 3.5 0 0 0 .4-7A5.2 5.2 0 0 0 7 9.2 4.2 4.2 0 0 0 7 17.5Z"/><path d="M8 21v-1m4 1v-1m4 1v-1"/>',
+      time:'<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
+      music:'<path d="M9 18V7l9-2v11"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="15.5" cy="16" r="2.5"/>',
+      search:'<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 4 4"/>',
+      app:'<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 9h8M8 13h5"/>',
+      screen:'<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M9 21h6m-3-4v4"/>',
+      spark:'<path d="m12 3 1.3 5.2L18 10l-4.7 1.8L12 17l-1.3-5.2L6 10l4.7-1.8L12 3Z"/><path d="m18.5 15 .6 2.1 1.9.7-1.9.7-.6 2.1-.6-2.1-1.9-.7 1.9-.7.6-2.1Z"/>'
+    };
+    function visual(kind){
+      if(!showIllustrations||!kind)return null;
+      const el=document.createElement("span");el.className="visual";
+      el.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${iconPaths[kind]||iconPaths.spark}</svg>`;
+      return el;
+    }
+    function streamWords(el,text,delays){
+      // Reveal the text word by word. If Python measured the voice we follow
+      // its timings; otherwise a fixed 45 ms cadence, as before.
+      el.textContent="";el.dataset.startedAt=String(performance.now());
+      const parts=String(text).split(/(\s+)/);let wi=0;
+      const marks=Array.isArray(delays)&&delays.length?delays:null;
+      parts.forEach(part=>{
+        if(/^\s*$/.test(part)){el.appendChild(document.createTextNode(part));return}
+        const s=document.createElement("span");s.className="tok";s.textContent=part;
+        const at=marks?(marks[Math.min(wi,marks.length-1)]||0):wi*45;
+        s.style.animationDelay=at+"ms";el.appendChild(s);wi++;
+      });
+    }
+    function addMessage(role,text,kind="",delays=null){
+      const value=String(text||"").trim();if(!value)return;
+      $("intro").classList.add("hidden");
+      const row=document.createElement("div");row.className=`message ${role}`;
+      const bubble=document.createElement("div");bubble.className="bubble";
+      if(role==="assistant")streamWords(bubble,value,delays);else bubble.textContent=value;
+      const art=role==="assistant"?visual(kind):null;if(art)row.appendChild(art);row.appendChild(bubble);
+      messages.appendChild(row);while(messages.children.length>14)messages.removeChild(messages.children[1]);
+      requestAnimationFrame(()=>{messages.scrollTop=messages.scrollHeight});
+    }
+    function addError(text){const row=document.createElement("div");row.className="message assistant error";const b=document.createElement("div");b.className="bubble";b.textContent=text;row.appendChild(b);messages.appendChild(row);messages.scrollTop=messages.scrollHeight}
+    function addSources(items){
+      const values=Array.isArray(items)?items.filter(item=>item&&item.title&&/^https?:\/\//.test(item.url||"")).slice(0,5):[];if(!values.length)return;
+      const list=document.createElement("div");list.className="source-list";list.setAttribute("aria-label","Sources");
+      values.forEach((item,index)=>{const link=document.createElement("a");link.className="source-chip";link.href=item.url;link.textContent=`${index+1} · ${item.title}`;link.title=item.url;link.addEventListener("click",event=>{event.preventDefault();if(hasApi("open_external"))window.pywebview.api.open_external(item.url);else window.open(item.url,"_blank")});list.appendChild(link)});
+      messages.appendChild(list);requestAnimationFrame(()=>{messages.scrollTop=messages.scrollHeight});
+    }
+    function addPreview(dataUrl,caption){
+      if(!/^data:image\/(?:png|jpeg);base64,/.test(String(dataUrl||"")))return;
+      const card=document.createElement("div");card.className="capture-card";const image=document.createElement("img");image.src=dataUrl;image.alt="Capture d’écran analysée par Ava";const label=document.createElement("div");label.className="capture-caption";label.textContent=caption||"Capture analysée localement";card.append(image,label);messages.appendChild(card);requestAnimationFrame(()=>{messages.scrollTop=messages.scrollHeight});
+    }
+    function finishStartup(){
+      if(startupTimer){clearTimeout(startupTimer);startupTimer=null}
+      shell.classList.remove("startup");$("startupStage").classList.add("loading");setState("idle");
+      if(hasApi("finish_startup"))window.pywebview.api.finish_startup();
+      setTimeout(()=>input.focus(),220);
+    }
+    // small weather illustrations (inline svg, animated in css)
+    const WXG={
+      clear:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="clear-day"><g id="Sun"><circle id="Core" cx="64" cy="63.9999" r="19.5" fill="url(#paint0_linear_1802_5186)" stroke="#F8AF18"/><g id="Rays"><path d="M61 19C61 17.3431 62.3431 16 64 16C65.6568 16 67 17.3431 67 19V33C67 34.6569 65.6568 36 64 36C62.3431 36 61 34.6569 61 33V19Z" fill="#F8AF18"/><path d="M93.6985 30.0589C94.87 28.8873 96.7696 28.8873 97.9411 30.0589C99.1127 31.2304 99.1127 33.1299 97.9411 34.3015L88.0416 44.201C86.8701 45.3726 84.9706 45.3726 83.799 44.201C82.6274 43.0294 82.6274 41.1299 83.799 39.9584L93.6985 30.0589Z" fill="#F8AF18"/><path d="M109 61C110.657 61 112 62.3432 112 64C112 65.6569 110.657 67 109 67H95C93.3431 67 92 65.6569 92 64C92 62.3432 93.3431 61 95 61H109Z" fill="#F8AF18"/><path d="M97.9411 93.6985C99.1127 94.8701 99.1127 96.7696 97.9411 97.9411C96.7696 99.1127 94.8701 99.1127 93.6985 97.9411L83.799 88.0416C82.6274 86.8701 82.6274 84.9706 83.799 83.799C84.9706 82.6274 86.8701 82.6274 88.0416 83.799L97.9411 93.6985Z" fill="#F8AF18"/><path d="M61 95C61 93.3431 62.3431 92 64 92C65.6568 92 67 93.3431 67 95V109C67 110.657 65.6568 112 64 112C62.3431 112 61 110.657 61 109V95Z" fill="#F8AF18"/><path d="M39.9584 83.799C41.1299 82.6274 43.0294 82.6274 44.201 83.799C45.3726 84.9706 45.3726 86.8701 44.201 88.0416L34.3015 97.9411C33.1299 99.1127 31.2304 99.1127 30.0589 97.9411C28.8873 96.7696 28.8873 94.87 30.0589 93.6985L39.9584 83.799Z" fill="#F8AF18"/><path d="M33 61C34.6569 61 36 62.3431 36 64C36 65.6568 34.6569 67 33 67H19C17.3431 67 16 65.6568 16 64C16 62.3431 17.3431 61 19 61H33Z" fill="#F8AF18"/><path d="M44.201 39.9584C45.3726 41.1299 45.3726 43.0294 44.201 44.201C43.0294 45.3726 41.1299 45.3726 39.9584 44.201L30.0589 34.3015C28.8873 33.1299 28.8873 31.2305 30.0589 30.0589C31.2305 28.8873 33.1299 28.8873 34.3015 30.0589L44.201 39.9584Z" fill="#F8AF18"/><animateTransform attributeName="transform" type="rotate" values="0 64.0 64.0;360 64.0 64.0" dur="6s" begin="0s" repeatCount="indefinite"/></g></g></g><defs><linearGradient id="paint0_linear_1802_5186" x1="64" y1="43.9999" x2="64" y2="83.9999" gradientUnits="userSpaceOnUse"><stop stop-color="#FBBF24"/><stop offset="1" stop-color="#F8AF18"/></linearGradient></defs></svg>',
+      partly:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="partly-cloudy-day" clip-path="url(#clip0_1858_8241)"><g id="Sky"><g id="Sun"><circle id="Core" cx="39" cy="51" r="8.5" fill="url(#paint0_linear_1858_8241)" stroke="#F8AF18"/><g id="Rays"><path d="M37.6875 31.3125C37.6875 30.5876 38.2751 30 39 30C39.7249 30 40.3125 30.5876 40.3125 31.3125V37.4375C40.3125 38.1624 39.7249 38.75 39 38.75C38.2751 38.75 37.6875 38.1624 37.6875 37.4375V31.3125Z" fill="#F8AF18"/><path d="M51.9931 36.1508C52.5056 35.6382 53.3367 35.6382 53.8492 36.1508C54.3618 36.6633 54.3618 37.4943 53.8492 38.0069L49.5182 42.3379C49.0056 42.8505 48.1746 42.8505 47.6621 42.3379C47.1495 41.8254 47.1495 40.9944 47.6621 40.4818L51.9931 36.1508Z" fill="#F8AF18"/><path d="M58.6875 49.6875C59.4124 49.6875 60 50.2751 60 51C60 51.7249 59.4124 52.3125 58.6875 52.3125H52.5625C51.8376 52.3125 51.25 51.7249 51.25 51C51.25 50.2751 51.8376 49.6875 52.5625 49.6875H58.6875Z" fill="#F8AF18"/><path d="M53.8492 63.9931C54.3618 64.5057 54.3618 65.3367 53.8492 65.8492C53.3367 66.3618 52.5056 66.3618 51.9931 65.8492L47.6621 61.5182C47.1495 61.0057 47.1495 60.1746 47.6621 59.6621C48.1746 59.1495 49.0057 59.1495 49.5182 59.6621L53.8492 63.9931Z" fill="#F8AF18"/><path d="M37.6875 64.5625C37.6875 63.8376 38.2751 63.25 39 63.25C39.7249 63.25 40.3125 63.8376 40.3125 64.5625V70.6875C40.3125 71.4124 39.7249 72 39 72C38.2751 72 37.6875 71.4124 37.6875 70.6875V64.5625Z" fill="#F8AF18"/><path d="M28.4818 59.6621C28.9943 59.1495 29.8254 59.1495 30.3379 59.6621C30.8505 60.1746 30.8505 61.0056 30.3379 61.5182L26.0069 65.8492C25.4943 66.3618 24.6633 66.3618 24.1508 65.8492C23.6382 65.3367 23.6382 64.5056 24.1508 63.9931L28.4818 59.6621Z" fill="#F8AF18"/><path d="M25.4375 49.6875C26.1624 49.6875 26.75 50.2751 26.75 51C26.75 51.7249 26.1624 52.3125 25.4375 52.3125H19.3125C18.5876 52.3125 18 51.7249 18 51C18 50.2751 18.5876 49.6875 19.3125 49.6875H25.4375Z" fill="#F8AF18"/><path d="M30.3379 40.4818C30.8505 40.9944 30.8505 41.8254 30.3379 42.3379C29.8254 42.8505 28.9944 42.8505 28.4818 42.3379L24.1508 38.0069C23.6382 37.4944 23.6382 36.6633 24.1508 36.1508C24.6633 35.6382 25.4944 35.6382 26.0069 36.1508L30.3379 40.4818Z" fill="#F8AF18"/><animateTransform attributeName="transform" type="rotate" values="0 39.0 51.0;360 39.0 51.0" dur="6s" begin="0s" repeatCount="indefinite"/></g></g><g id="Clouds"><g id="Cloud"><path id="Cloud_2" d="M55.2623 48.4746C60.1227 40.6111 70.2975 37.38 78.8151 40.9434C87.3214 44.5023 92.138 54.0026 89.903 62.9648L89.7418 63.6143L90.4108 63.585C97.4203 63.2791 103.5 68.9917 103.5 76.0283C103.5 82.8395 97.7717 88.4997 90.9772 88.5H37.9537C31.1275 88.5018 25.2029 83.1709 24.5592 76.3604C23.9158 69.5518 28.7369 63.2124 35.443 61.9453L35.9264 61.8535L35.8424 61.3691C35.0256 56.6239 37.1258 51.7168 41.1051 49.0127C45.0951 46.3014 50.4459 46.1537 54.5797 48.6396L55.0026 48.8945L55.2623 48.4746Z" fill="url(#paint1_linear_1858_8241)" stroke="#E6EFFC" stroke-miterlimit="10"/></g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g></g></g><defs><linearGradient id="paint0_linear_1858_8241" x1="39" y1="42" x2="39" y2="60" gradientUnits="userSpaceOnUse"><stop stop-color="#FBBF24"/><stop offset="1" stop-color="#F8AF18"/></linearGradient><linearGradient id="paint1_linear_1858_8241" x1="64.0008" y1="39" x2="64.0008" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F7FE"/><stop offset="1" stop-color="#E6EFFC"/></linearGradient><clipPath id="clip0_1858_8241"><rect width="128" height="128" fill="white"/></clipPath></defs></svg>',
+      cloudy:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="overcast-day" clip-path="url(#clip0_1858_8265)"><g id="Sky"><g id="Sun"><circle id="Core" cx="39" cy="51" r="8.5" fill="url(#paint0_linear_1858_8265)" stroke="#F8AF18"/><g id="Rays"><path d="M37.6875 31.3125C37.6875 30.5876 38.2751 30 39 30C39.7249 30 40.3125 30.5876 40.3125 31.3125V37.4375C40.3125 38.1624 39.7249 38.75 39 38.75C38.2751 38.75 37.6875 38.1624 37.6875 37.4375V31.3125Z" fill="#F8AF18"/><path d="M51.9931 36.1508C52.5056 35.6382 53.3367 35.6382 53.8492 36.1508C54.3618 36.6633 54.3618 37.4943 53.8492 38.0069L49.5182 42.3379C49.0056 42.8505 48.1746 42.8505 47.6621 42.3379C47.1495 41.8254 47.1495 40.9944 47.6621 40.4818L51.9931 36.1508Z" fill="#F8AF18"/><path d="M58.6875 49.6875C59.4124 49.6875 60 50.2751 60 51C60 51.7249 59.4124 52.3125 58.6875 52.3125H52.5625C51.8376 52.3125 51.25 51.7249 51.25 51C51.25 50.2751 51.8376 49.6875 52.5625 49.6875H58.6875Z" fill="#F8AF18"/><path d="M53.8492 63.9931C54.3618 64.5057 54.3618 65.3367 53.8492 65.8492C53.3367 66.3618 52.5056 66.3618 51.9931 65.8492L47.6621 61.5182C47.1495 61.0057 47.1495 60.1746 47.6621 59.6621C48.1746 59.1495 49.0057 59.1495 49.5182 59.6621L53.8492 63.9931Z" fill="#F8AF18"/><path d="M37.6875 64.5625C37.6875 63.8376 38.2751 63.25 39 63.25C39.7249 63.25 40.3125 63.8376 40.3125 64.5625V70.6875C40.3125 71.4124 39.7249 72 39 72C38.2751 72 37.6875 71.4124 37.6875 70.6875V64.5625Z" fill="#F8AF18"/><path d="M28.4818 59.6621C28.9943 59.1495 29.8254 59.1495 30.3379 59.6621C30.8505 60.1746 30.8505 61.0056 30.3379 61.5182L26.0069 65.8492C25.4943 66.3618 24.6633 66.3618 24.1508 65.8492C23.6382 65.3367 23.6382 64.5056 24.1508 63.9931L28.4818 59.6621Z" fill="#F8AF18"/><path d="M25.4375 49.6875C26.1624 49.6875 26.75 50.2751 26.75 51C26.75 51.7249 26.1624 52.3125 25.4375 52.3125H19.3125C18.5876 52.3125 18 51.7249 18 51C18 50.2751 18.5876 49.6875 19.3125 49.6875H25.4375Z" fill="#F8AF18"/><path d="M30.3379 40.4818C30.8505 40.9944 30.8505 41.8254 30.3379 42.3379C29.8254 42.8505 28.9944 42.8505 28.4818 42.3379L24.1508 38.0069C23.6382 37.4944 23.6382 36.6633 24.1508 36.1508C24.6633 35.6382 25.4944 35.6382 26.0069 36.1508L30.3379 40.4818Z" fill="#F8AF18"/><animateTransform attributeName="transform" type="rotate" values="0 39.0 51.0;360 39.0 51.0" dur="6s" begin="0s" repeatCount="indefinite"/></g></g><g id="Clouds"><g id="Secondary Cloud"><path id="Cloud" d="M83.8392 48.6934C86.2444 44.9584 91.2146 43.529 95.3177 45.1768C99.3609 46.8006 101.814 51.1888 100.71 55.4365L100.54 56.0898L101.215 56.0615C104.496 55.924 107.5 58.4646 107.5 61.7744C107.5 64.9759 104.669 67.4999 101.489 67.5H74.9769C71.7679 67.5008 68.8449 65.1182 68.5287 61.9072C68.2136 58.7068 70.6168 55.8414 73.764 55.2705L74.2552 55.1816L74.1674 54.6904C73.7734 52.4931 74.8117 50.2493 76.6849 49.0273C78.6105 47.7713 81.177 47.7069 83.1683 48.8564L83.5814 49.0938L83.8392 48.6934Z" fill="url(#paint1_linear_1858_8265)" stroke="#94A3B8" stroke-miterlimit="10"/><animateTransform attributeName="transform" type="translate" values="0 -3;0 0;0 -3" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g><g id="Cloud_2"><path id="Cloud_3" d="M55.2623 48.4746C60.1227 40.6111 70.2975 37.38 78.8151 40.9434C87.3214 44.5023 92.138 54.0026 89.903 62.9648L89.7418 63.6143L90.4108 63.585C97.4203 63.2791 103.5 68.9917 103.5 76.0283C103.5 82.8395 97.7717 88.4997 90.9772 88.5H37.9537C31.1275 88.5018 25.2029 83.1709 24.5592 76.3604C23.9158 69.5518 28.7369 63.2124 35.443 61.9453L35.9264 61.8535L35.8424 61.3691C35.0256 56.6239 37.1258 51.7168 41.1051 49.0127C45.0951 46.3014 50.4459 46.1537 54.5797 48.6396L55.0026 48.8945L55.2623 48.4746Z" fill="url(#paint2_linear_1858_8265)" stroke="#E6EFFC" stroke-miterlimit="10"/><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g></g></g></g><defs><linearGradient id="paint0_linear_1858_8265" x1="39" y1="42" x2="39" y2="60" gradientUnits="userSpaceOnUse"><stop stop-color="#FBBF24"/><stop offset="1" stop-color="#F8AF18"/></linearGradient><linearGradient id="paint1_linear_1858_8265" x1="88.0002" y1="44" x2="88.0002" y2="68" gradientUnits="userSpaceOnUse"><stop stop-color="#B0BCCD"/><stop offset="1" stop-color="#94A3B8"/></linearGradient><linearGradient id="paint2_linear_1858_8265" x1="64.0008" y1="39" x2="64.0008" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F7FE"/><stop offset="1" stop-color="#E6EFFC"/></linearGradient><clipPath id="clip0_1858_8265"><rect width="128" height="128" fill="white"/></clipPath></defs></svg>',
+      rain:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="rain" clip-path="url(#clip0_1858_8370)"><g id="Sky"><g id="Clouds"><g id="Cloud"><path id="Cloud_2" d="M55.2623 48.4746C60.1227 40.6111 70.2975 37.38 78.8151 40.9434C87.3214 44.5023 92.138 54.0026 89.903 62.9648L89.7418 63.6143L90.4108 63.585C97.4203 63.2791 103.5 68.9917 103.5 76.0283C103.5 82.8395 97.7717 88.4997 90.9772 88.5H37.9537C31.1275 88.5018 25.2029 83.1709 24.5592 76.3604C23.9158 69.5518 28.7369 63.2124 35.443 61.9453L35.9264 61.8535L35.8424 61.3691C35.0256 56.6239 37.1258 51.7168 41.1051 49.0127C45.0951 46.3014 50.4459 46.1537 54.5797 48.6396L55.0026 48.8945L55.2623 48.4746Z" fill="url(#paint0_linear_1858_8370)" stroke="#E6EFFC" stroke-miterlimit="10"/></g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g></g><g id="Precipitation"><g id="Raindrops"><path id="Raindrop 1" d="M52 83V95" stroke="#0A5AD4" stroke-width="4" stroke-linecap="round"><animateTransform attributeName="transform" type="translate" values="0 0;0 20" dur="1s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 1 1"/><animate attributeName="opacity" values="0;1;1;0" dur="1s" begin="0s" repeatCount="indefinite" keyTimes="0;0.15;0.85;1"/></path><path id="Raindrop 2" d="M64 83V95" stroke="#0A5AD4" stroke-width="4" stroke-linecap="round" opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;0 20" dur="1s" begin="0.4s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 1 1"/><animate attributeName="opacity" values="0;1;1;0" dur="1s" begin="0.4s" repeatCount="indefinite" keyTimes="0;0.15;0.85;1"/></path><path id="Raindrop 3" d="M76 83V95" stroke="#0A5AD4" stroke-width="4" stroke-linecap="round" opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;0 20" dur="1s" begin="0.8s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 1 1"/><animate attributeName="opacity" values="0;1;1;0" dur="1s" begin="0.8s" repeatCount="indefinite" keyTimes="0;0.15;0.85;1"/></path></g></g></g><defs><linearGradient id="paint0_linear_1858_8370" x1="64.0008" y1="39" x2="64.0008" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F7FE"/><stop offset="1" stop-color="#E6EFFC"/></linearGradient><clipPath id="clip0_1858_8370"><rect width="128" height="128" fill="white"/></clipPath></defs></svg>',
+      snow:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="snow" clip-path="url(#clip0_1858_8860)"><g id="Sky"><g id="Clouds"><g id="Cloud"><path id="Cloud_2" d="M55.2623 48.4746C60.1227 40.6111 70.2975 37.38 78.8151 40.9434C87.3214 44.5023 92.138 54.0026 89.903 62.9648L89.7418 63.6143L90.4108 63.585C97.4203 63.2791 103.5 68.9917 103.5 76.0283C103.5 82.8395 97.7717 88.4997 90.9772 88.5H37.9537C31.1275 88.5018 25.2029 83.1709 24.5592 76.3604C23.9158 69.5518 28.7369 63.2124 35.443 61.9453L35.9264 61.8535L35.8424 61.3691C35.0256 56.6239 37.1258 51.7168 41.1051 49.0127C45.0951 46.3014 50.4459 46.1537 54.5797 48.6396L55.0026 48.8945L55.2623 48.4746Z" fill="url(#paint0_linear_1858_8860)" stroke="#E6EFFC" stroke-miterlimit="10"/></g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g></g><g id="Precipitation"><g id="Snowflakes"><path id="Snowflake 1" d="M52.5781 90.366L51.3735 89.6775C51.4794 89.2326 51.4786 88.7687 51.3708 88.3241L52.5781 87.6345C52.6738 87.5805 52.7577 87.5079 52.8252 87.421C52.8926 87.3342 52.9423 87.2347 52.9711 87.1284C52.9998 87.0221 53.0071 86.9112 52.9926 86.802C52.9782 86.6928 52.9422 86.5876 52.8868 86.4926C52.7732 86.2998 52.5886 86.1597 52.3728 86.1025C52.157 86.0452 51.9276 86.0754 51.7339 86.1866L50.5278 86.8763C50.1931 86.5586 49.7868 86.3264 49.3437 86.1995V84.8202C49.3368 84.6003 49.245 84.3918 49.0875 84.2387C48.93 84.0856 48.7192 84 48.4998 84C48.2805 84 48.0699 84.0856 47.9124 84.2387C47.7548 84.3918 47.6628 84.6003 47.656 84.8202V86.1995C47.214 86.3289 46.8081 86.5598 46.4706 86.874L45.2662 86.1853C45.0724 86.0742 44.8428 86.044 44.627 86.1013C44.4113 86.1585 44.2267 86.2986 44.113 86.4913C44.0576 86.5864 44.0217 86.6916 44.0072 86.8007C43.9928 86.9099 44 87.0209 44.0288 87.1271C44.0575 87.2334 44.1072 87.3329 44.1747 87.4198C44.2421 87.5067 44.326 87.5792 44.4217 87.6332L45.6264 88.3216C45.5204 88.7666 45.5213 89.2305 45.629 89.675L44.4217 90.3647C44.326 90.4187 44.2421 90.4912 44.1747 90.5781C44.1072 90.665 44.0575 90.7645 44.0288 90.8708C44 90.9771 43.9928 91.088 44.0072 91.1972C44.0217 91.3063 44.0576 91.4115 44.113 91.5066C44.2267 91.6992 44.4113 91.8392 44.627 91.8965C44.8428 91.9537 45.0724 91.9236 45.2662 91.8126L46.4721 91.1229C46.8063 91.4409 47.2128 91.6726 47.6562 91.7979V93.1798C47.6631 93.3997 47.755 93.6082 47.9126 93.7613C48.0701 93.9144 48.2807 94 48.5 94C48.7194 94 48.9302 93.9144 49.0877 93.7613C49.2452 93.6082 49.337 93.3997 49.3439 93.1798V91.7975C49.7853 91.6683 50.1907 91.4378 50.5278 91.1242L51.7341 91.8138C51.9278 91.9248 52.1573 91.955 52.373 91.8977C52.5888 91.8405 52.7733 91.7005 52.887 91.5079C52.9424 91.4128 52.9784 91.3076 52.9928 91.1984C53.0073 91.0892 52.9998 90.9783 52.9711 90.872C52.9423 90.7657 52.8929 90.6662 52.8254 90.5793C52.7579 90.4925 52.6738 90.4199 52.5781 90.366ZM47.8664 90.0861C47.7229 90.005 47.5968 89.8961 47.4956 89.7657C47.3944 89.6353 47.3202 89.486 47.2771 89.3266C47.2339 89.1671 47.2228 89.0007 47.2443 88.8369C47.2658 88.6731 47.3197 88.5152 47.4026 88.3724C47.5735 88.084 47.8503 87.8743 48.1736 87.7883C48.497 87.7023 48.8411 87.747 49.1321 87.9126C49.2756 87.9938 49.4016 88.1027 49.5028 88.2331C49.604 88.3635 49.6782 88.5127 49.7214 88.6722C49.7645 88.8316 49.7757 88.9981 49.7541 89.1619C49.7326 89.3257 49.6787 89.4836 49.5958 89.6263C49.425 89.9149 49.1482 90.1247 48.8248 90.2108C48.5014 90.2969 48.1574 90.2523 47.8664 90.0867V90.0861Z" fill="#86C3DB" opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;0 20" dur="1s" begin="0.2s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 1 1"/><animate attributeName="opacity" values="0;1;1;0" dur="1s" begin="0.2s" repeatCount="indefinite" keyTimes="0;0.15;0.85;1"/></path><path id="Snowflake 2" d="M67.5781 90.366L66.3735 89.6775C66.4794 89.2326 66.4786 88.7687 66.3708 88.3241L67.5781 87.6345C67.6738 87.5805 67.7577 87.5079 67.8252 87.421C67.8926 87.3342 67.9423 87.2347 67.9711 87.1284C67.9998 87.0221 68.0071 86.9112 67.9926 86.802C67.9782 86.6928 67.9422 86.5876 67.8868 86.4926C67.7732 86.2998 67.5886 86.1597 67.3728 86.1025C67.157 86.0452 66.9276 86.0754 66.7339 86.1866L65.5278 86.8763C65.1931 86.5586 64.7868 86.3264 64.3437 86.1995V84.8202C64.3368 84.6003 64.245 84.3918 64.0875 84.2387C63.93 84.0856 63.7192 84 63.4998 84C63.2805 84 63.0699 84.0856 62.9124 84.2387C62.7548 84.3918 62.6628 84.6003 62.656 84.8202V86.1995C62.214 86.3289 61.8081 86.5598 61.4706 86.874L60.2662 86.1853C60.0724 86.0742 59.8428 86.044 59.627 86.1013C59.4113 86.1585 59.2267 86.2986 59.113 86.4913C59.0576 86.5864 59.0217 86.6916 59.0072 86.8007C58.9928 86.9099 59 87.0209 59.0288 87.1271C59.0575 87.2334 59.1072 87.3329 59.1747 87.4198C59.2421 87.5067 59.326 87.5792 59.4217 87.6332L60.6264 88.3216C60.5204 88.7666 60.5213 89.2305 60.629 89.675L59.4217 90.3647C59.326 90.4187 59.2421 90.4912 59.1747 90.5781C59.1072 90.665 59.0575 90.7645 59.0288 90.8708C59 90.9771 58.9928 91.088 59.0072 91.1972C59.0217 91.3063 59.0576 91.4115 59.113 91.5066C59.2267 91.6992 59.4113 91.8392 59.627 91.8965C59.8428 91.9537 60.0724 91.9236 60.2662 91.8126L61.4721 91.1229C61.8063 91.4409 62.2128 91.6726 62.6562 91.7979V93.1798C62.6631 93.3997 62.755 93.6082 62.9126 93.7613C63.0701 93.9144 63.2807 94 63.5 94C63.7194 94 63.9302 93.9144 64.0877 93.7613C64.2452 93.6082 64.337 93.3997 64.3439 93.1798V91.7975C64.7853 91.6683 65.1907 91.4378 65.5278 91.1242L66.7341 91.8138C66.9278 91.9248 67.1573 91.955 67.373 91.8977C67.5888 91.8405 67.7733 91.7005 67.887 91.5079C67.9424 91.4128 67.9784 91.3076 67.9928 91.1984C68.0073 91.0892 67.9998 90.9783 67.9711 90.872C67.9423 90.7657 67.8929 90.6662 67.8254 90.5793C67.7579 90.4925 67.6738 90.4199 67.5781 90.366ZM62.8664 90.0861C62.7229 90.005 62.5968 89.8961 62.4956 89.7657C62.3944 89.6353 62.3202 89.486 62.2771 89.3266C62.2339 89.1671 62.2228 89.0007 62.2443 88.8369C62.2658 88.6731 62.3197 88.5152 62.4026 88.3724C62.5735 88.084 62.8503 87.8743 63.1736 87.7883C63.497 87.7023 63.8411 87.747 64.1321 87.9126C64.2756 87.9938 64.4016 88.1027 64.5028 88.2331C64.604 88.3635 64.6782 88.5127 64.7214 88.6722C64.7645 88.8316 64.7757 88.9981 64.7541 89.1619C64.7326 89.3257 64.6787 89.4836 64.5958 89.6263C64.425 89.9149 64.1482 90.1247 63.8248 90.2108C63.5014 90.2969 63.1574 90.2523 62.8664 90.0867V90.0861Z" fill="#86C3DB" opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;0 20" dur="1s" begin="0.7s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 1 1"/><animate attributeName="opacity" values="0;1;1;0" dur="1s" begin="0.7s" repeatCount="indefinite" keyTimes="0;0.15;0.85;1"/></path><path id="Snowflake 3" d="M82.5781 90.366L81.3735 89.6775C81.4794 89.2326 81.4786 88.7687 81.3708 88.3241L82.5781 87.6345C82.6738 87.5805 82.7577 87.5079 82.8252 87.421C82.8926 87.3342 82.9423 87.2347 82.9711 87.1284C82.9998 87.0221 83.0071 86.9112 82.9926 86.802C82.9782 86.6928 82.9422 86.5876 82.8868 86.4926C82.7732 86.2998 82.5886 86.1597 82.3728 86.1025C82.157 86.0452 81.9276 86.0754 81.7339 86.1866L80.5278 86.8763C80.1931 86.5586 79.7868 86.3264 79.3437 86.1995V84.8202C79.3368 84.6003 79.245 84.3918 79.0875 84.2387C78.93 84.0856 78.7192 84 78.4998 84C78.2805 84 78.0699 84.0856 77.9124 84.2387C77.7548 84.3918 77.6628 84.6003 77.656 84.8202V86.1995C77.214 86.3289 76.8081 86.5598 76.4706 86.874L75.2662 86.1853C75.0724 86.0742 74.8428 86.044 74.627 86.1013C74.4113 86.1585 74.2267 86.2986 74.113 86.4913C74.0576 86.5864 74.0217 86.6916 74.0072 86.8007C73.9928 86.9099 74 87.0209 74.0288 87.1271C74.0575 87.2334 74.1072 87.3329 74.1747 87.4198C74.2421 87.5067 74.326 87.5792 74.4217 87.6332L75.6264 88.3216C75.5204 88.7666 75.5213 89.2305 75.629 89.675L74.4217 90.3647C74.326 90.4187 74.2421 90.4912 74.1747 90.5781C74.1072 90.665 74.0575 90.7645 74.0288 90.8708C74 90.9771 73.9928 91.088 74.0072 91.1972C74.0217 91.3063 74.0576 91.4115 74.113 91.5066C74.2267 91.6992 74.4113 91.8392 74.627 91.8965C74.8428 91.9537 75.0724 91.9236 75.2662 91.8126L76.4721 91.1229C76.8063 91.4409 77.2128 91.6726 77.6562 91.7979V93.1798C77.6631 93.3997 77.755 93.6082 77.9126 93.7613C78.0701 93.9144 78.2807 94 78.5 94C78.7194 94 78.9302 93.9144 79.0877 93.7613C79.2452 93.6082 79.337 93.3997 79.3439 93.1798V91.7975C79.7853 91.6683 80.1907 91.4378 80.5278 91.1242L81.7341 91.8138C81.9278 91.9248 82.1573 91.955 82.373 91.8977C82.5888 91.8405 82.7733 91.7005 82.887 91.5079C82.9424 91.4128 82.9784 91.3076 82.9928 91.1984C83.0073 91.0892 82.9998 90.9783 82.9711 90.872C82.9423 90.7657 82.8929 90.6662 82.8254 90.5793C82.7579 90.4925 82.6738 90.4199 82.5781 90.366ZM77.8664 90.0861C77.7229 90.005 77.5968 89.8961 77.4956 89.7657C77.3944 89.6353 77.3202 89.486 77.2771 89.3266C77.2339 89.1671 77.2228 89.0007 77.2443 88.8369C77.2658 88.6731 77.3197 88.5152 77.4026 88.3724C77.5735 88.084 77.8503 87.8743 78.1736 87.7883C78.497 87.7023 78.8411 87.747 79.1321 87.9126C79.2756 87.9938 79.4016 88.1027 79.5028 88.2331C79.604 88.3635 79.6782 88.5127 79.7214 88.6722C79.7645 88.8316 79.7757 88.9981 79.7541 89.1619C79.7326 89.3257 79.6787 89.4836 79.5958 89.6263C79.425 89.9149 79.1482 90.1247 78.8248 90.2108C78.5014 90.2969 78.1574 90.2523 77.8664 90.0867V90.0861Z" fill="#86C3DB" opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;0 20" dur="1s" begin="1.2s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 1 1"/><animate attributeName="opacity" values="0;1;1;0" dur="1s" begin="1.2s" repeatCount="indefinite" keyTimes="0;0.15;0.85;1"/></path></g></g></g><defs><linearGradient id="paint0_linear_1858_8860" x1="64.0008" y1="39" x2="64.0008" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F7FE"/><stop offset="1" stop-color="#E6EFFC"/></linearGradient><clipPath id="clip0_1858_8860"><rect width="128" height="128" fill="white"/></clipPath></defs></svg>',
+      storm:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="thunderstorms-day" clip-path="url(#clip0_1858_9913)"><g id="Sky"><g id="Sun"><circle id="Core" cx="39" cy="51" r="8.5" fill="url(#paint0_linear_1858_9913)" stroke="#F8AF18"/><g id="Rays"><path d="M37.6875 31.3125C37.6875 30.5876 38.2751 30 39 30C39.7249 30 40.3125 30.5876 40.3125 31.3125V37.4375C40.3125 38.1624 39.7249 38.75 39 38.75C38.2751 38.75 37.6875 38.1624 37.6875 37.4375V31.3125Z" fill="#F8AF18"/><path d="M51.9931 36.1508C52.5056 35.6382 53.3367 35.6382 53.8492 36.1508C54.3618 36.6633 54.3618 37.4943 53.8492 38.0069L49.5182 42.3379C49.0056 42.8505 48.1746 42.8505 47.6621 42.3379C47.1495 41.8254 47.1495 40.9944 47.6621 40.4818L51.9931 36.1508Z" fill="#F8AF18"/><path d="M58.6875 49.6875C59.4124 49.6875 60 50.2751 60 51C60 51.7249 59.4124 52.3125 58.6875 52.3125H52.5625C51.8376 52.3125 51.25 51.7249 51.25 51C51.25 50.2751 51.8376 49.6875 52.5625 49.6875H58.6875Z" fill="#F8AF18"/><path d="M53.8492 63.9931C54.3618 64.5057 54.3618 65.3367 53.8492 65.8492C53.3367 66.3618 52.5056 66.3618 51.9931 65.8492L47.6621 61.5182C47.1495 61.0057 47.1495 60.1746 47.6621 59.6621C48.1746 59.1495 49.0057 59.1495 49.5182 59.6621L53.8492 63.9931Z" fill="#F8AF18"/><path d="M37.6875 64.5625C37.6875 63.8376 38.2751 63.25 39 63.25C39.7249 63.25 40.3125 63.8376 40.3125 64.5625V70.6875C40.3125 71.4124 39.7249 72 39 72C38.2751 72 37.6875 71.4124 37.6875 70.6875V64.5625Z" fill="#F8AF18"/><path d="M28.4818 59.6621C28.9943 59.1495 29.8254 59.1495 30.3379 59.6621C30.8505 60.1746 30.8505 61.0056 30.3379 61.5182L26.0069 65.8492C25.4943 66.3618 24.6633 66.3618 24.1508 65.8492C23.6382 65.3367 23.6382 64.5056 24.1508 63.9931L28.4818 59.6621Z" fill="#F8AF18"/><path d="M25.4375 49.6875C26.1624 49.6875 26.75 50.2751 26.75 51C26.75 51.7249 26.1624 52.3125 25.4375 52.3125H19.3125C18.5876 52.3125 18 51.7249 18 51C18 50.2751 18.5876 49.6875 19.3125 49.6875H25.4375Z" fill="#F8AF18"/><path d="M30.3379 40.4818C30.8505 40.9944 30.8505 41.8254 30.3379 42.3379C29.8254 42.8505 28.9944 42.8505 28.4818 42.3379L24.1508 38.0069C23.6382 37.4944 23.6382 36.6633 24.1508 36.1508C24.6633 35.6382 25.4944 35.6382 26.0069 36.1508L30.3379 40.4818Z" fill="#F8AF18"/><animateTransform attributeName="transform" type="rotate" values="0 39.0 51.0;360 39.0 51.0" dur="6s" begin="0s" repeatCount="indefinite"/></g></g><g id="Clouds"><g id="Cloud"><path id="Cloud_2" d="M55.2625 48.4746C60.1228 40.6111 70.2976 37.38 78.8152 40.9434C87.3215 44.5023 92.1381 54.0026 89.9031 62.9648L89.7419 63.6143L90.4109 63.585C97.4205 63.2791 103.5 68.9917 103.5 76.0283C103.5 82.8395 97.7719 88.4997 90.9773 88.5H37.9539C31.1276 88.5018 25.203 83.1709 24.5593 76.3604C23.9159 69.5518 28.7371 63.2124 35.4431 61.9453L35.9265 61.8535L35.8425 61.3691C35.0258 56.6239 37.1259 51.7168 41.1052 49.0127C45.0952 46.3014 50.4461 46.1537 54.5798 48.6396L55.0027 48.8945L55.2625 48.4746Z" fill="url(#paint1_linear_1858_9913)" stroke="#E6EFFC" stroke-miterlimit="10"/></g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g></g><g id="Lightning"><path id="Lightning Bolt" d="M71.1729 68.5L63.5566 83.041L63.1729 83.7725H75.002L56.9521 107.892L60.4893 91.0117L60.6162 90.4092H52.7041L60.3555 68.5H71.1729Z" fill="url(#paint2_linear_1858_9913)" stroke="#F6A823" stroke-miterlimit="10"><animate attributeName="opacity" values="1;1;0;1;0;1;0;1;1" dur="2s" begin="0s" repeatCount="indefinite" keyTimes="0;0.25;0.33;0.42;0.5;0.57;0.63;0.67;1"/></path></g></g><defs><linearGradient id="paint0_linear_1858_9913" x1="39" y1="42" x2="39" y2="60" gradientUnits="userSpaceOnUse"><stop stop-color="#FBBF24"/><stop offset="1" stop-color="#F8AF18"/></linearGradient><linearGradient id="paint1_linear_1858_9913" x1="64.0009" y1="39" x2="64.0009" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F7FE"/><stop offset="1" stop-color="#E6EFFC"/></linearGradient><linearGradient id="paint2_linear_1858_9913" x1="64.528" y1="66.0377" x2="84.4144" y2="77.4572" gradientUnits="userSpaceOnUse"><stop stop-color="#F7B23B"/><stop offset="1" stop-color="#F6A823"/></linearGradient><clipPath id="clip0_1858_9913"><rect width="128" height="128" fill="white"/></clipPath></defs></svg>',
+      fog:'<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="fog" clip-path="url(#clip0_1858_9374)"><g id="Sky"><g id="Clouds"><g id="Cloud"><path id="Cloud_2" d="M55.2623 48.4746C60.1227 40.6111 70.2975 37.38 78.8151 40.9434C87.3214 44.5023 92.138 54.0026 89.903 62.9648L89.7418 63.6143L90.4108 63.585C97.4203 63.2791 103.5 68.9917 103.5 76.0283C103.5 82.8395 97.7717 88.4997 90.9772 88.5H37.9537C31.1275 88.5018 25.2029 83.1709 24.5592 76.3604C23.9158 69.5518 28.7369 63.2124 35.443 61.9453L35.9264 61.8535L35.8424 61.3691C35.0256 56.6239 37.1258 51.7168 41.1051 49.0127C45.0951 46.3014 50.4459 46.1537 54.5797 48.6396L55.0026 48.8945L55.2623 48.4746Z" fill="url(#paint0_linear_1858_9374)" stroke="#E6EFFC" stroke-miterlimit="10"/></g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></g></g><g id="Precipitation"><path id="Line 2" d="M40 95H88" stroke="#E2E8F0" stroke-width="3" stroke-miterlimit="10" stroke-linecap="round"><animateTransform attributeName="transform" type="translate" values="0 0;3 0;0 0" dur="3s" begin="0s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></path><path id="Line 1" d="M40 103H88" stroke="#E2E8F0" stroke-width="3" stroke-miterlimit="10" stroke-linecap="round"><animateTransform attributeName="transform" type="translate" values="0 0;3 0;0 0" dur="3s" begin="0.2s" repeatCount="indefinite" calcMode="spline" keySplines=".42 0 .58 1; .42 0 .58 1"/></path></g></g><defs><linearGradient id="paint0_linear_1858_9374" x1="64.0008" y1="39" x2="64.0008" y2="89" gradientUnits="userSpaceOnUse"><stop stop-color="#F3F7FE"/><stop offset="1" stop-color="#E6EFFC"/></linearGradient><clipPath id="clip0_1858_9374"><rect width="128" height="128" fill="white"/></clipPath></defs></svg>'
+    };
+    // ~165 words per minute: a reading pace close to an unhurried voice.
+    function estimateSpeechMs(text){const n=String(text||"").trim().split(/\s+/).filter(Boolean).length;return Math.max(3200,Math.round(n/165*60*1000))}
+    function revealTimed(el,text,totalMs,delays){
+      // Reveal the text word by word. Python now supplies the exact moment of
+      // each word (measured on the generated audio, sentence by sentence); we
+      // fall back to a linear spread when it doesn't.
+      el.textContent="";const parts=String(text||"").split(/(\s+)/);
+      const words=parts.filter(p=>!/^\s*$/.test(p)).length||1,step=Math.max(24,totalMs/words);
+      const marks=Array.isArray(delays)&&delays.length?delays:null;
+      let wi=0;
+      parts.forEach(part=>{
+        if(/^\s*$/.test(part)){el.appendChild(document.createTextNode(part));return}
+        const s=document.createElement("span");s.className="tok";s.textContent=part;
+        const at=marks?(marks[Math.min(wi,marks.length-1)]||0):wi*step;
+        s.style.animationDelay=at+"ms";el.appendChild(s);wi++;
+      });
+      el.scrollTop=0;
+    }
+    function renderStartup(profile){
+      const data=profile||{};if(startupTimer){clearTimeout(startupTimer);startupTimer=null}
+      shell.classList.remove("dormant","compact");shell.classList.add("startup");
+      $("startupName").textContent=data.name||"Bienvenue";$("startupCity").textContent=data.city||"";$("startupDate").textContent=data.date||"";
+      $("startupNews").textContent=data.news||"Recherche d’une actualité IA récente…";$("startupSource").textContent=data.source||"Source en cours";
+      // "hier" reads faster than a date, so the date stays in the tooltip.
+      const pub=$("startupPublished");pub.textContent=data.freshness||data.published||"";pub.title=data.published||"";
+      // A huge "Bonjour" at 10 pm right next to text saying "Bonsoir": the
+      // greeting follows the clock, the same way the spoken briefing does.
+      $("startupHello").textContent=data.hello||"Bonjour";
+      // the author gets its own style: butted up against the quote it looked
+      // like a second sentence of the quote itself.
+      const q=$("startupQuote");q.replaceChildren(document.createTextNode(data.quote||"Construis aujourd’hui ce dont tu seras fier demain."));
+      if(data.quote_author){const a=document.createElement("span");a.className="startup-quote-author";a.textContent="— "+data.quote_author;q.appendChild(a)}
+      startupSourceUrl=/^https?:\/\//.test(data.source_url||"")?data.source_url:"";
+      // illustrated weather (left column) + the "what ava tells you" transcript (right)
+      const wx=data.weather;
+      if(wx){
+        $("startupWeather").classList.remove("hidden");
+        $("startupWxGlyph").innerHTML=WXG[wx.glyph]||WXG.partly;
+        $("startupWxTemp").textContent=(wx.temp!=null?wx.temp+"°":"");
+        $("startupWxDesc").textContent=wx.desc||"";
+        $("startupWxRange").innerHTML=(wx.tmax!=null)?`↑ <b>${wx.tmax}°</b>&nbsp; ↓ <b>${wx.tmin}°</b>`:"";
+      } else {$("startupWeather").classList.add("hidden")}
+      // the transcript reveals at speaking pace (words per minute). when ava
+      // really talks (the briefing), Python sends the exact duration through
+      // avaStartupBrief.
+      const brief=String(data.briefing||"").trim();let briefMs=0;
+      if(brief){
+        $("startupBriefWrap").classList.remove("hidden");
+        briefMs=Number(data.briefing_ms)>0?Number(data.briefing_ms):estimateSpeechMs(brief);
+        revealTimed($("startupBrief"),brief,briefMs);
+      } else {$("startupBriefWrap").classList.add("hidden")}
+      const loading=!!data.loading,autoFinish=data.auto_finish!==false;$("startupStage").classList.toggle("loading",loading);$("startupSource").disabled=!startupSourceUrl;
+      let duration=Math.max(4,Math.min(20,Number(data.duration)||9));
+      if(brief)duration=Math.max(duration,Math.ceil(briefMs/1000)+2);   // laisse le temps de tout lire
+      document.documentElement.style.setProperty("--startup-duration",`${duration}s`);
+      if(!loading&&autoFinish)startupTimer=setTimeout(finishStartup,duration*1000);
+    }
+
+    function hasApi(name){return !!(window.pywebview&&window.pywebview.api&&window.pywebview.api[name])}
+    async function submitText(value){
+      const text=String(value||"").trim();if(!text)return;
+      addMessage("user",text);input.value="";resizeInput();send.disabled=true;setState("thinking");
+      if(!hasApi("submit_text")){setTimeout(()=>{addMessage("assistant","Aperçu local : lance Ava pour exécuter cette demande.","spark");setState("idle")},350);return}
+      try{const result=await window.pywebview.api.submit_text(text);if(!result||!result.accepted){addError((result&&result.error)||"Ava est occupée.");setState("idle")}}
+      catch(error){addError("Connexion avec Ava interrompue.");setState("error")}
+    }
+    $("composer").addEventListener("submit",event=>{event.preventDefault();submitText(input.value)});
+    input.addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();submitText(input.value)}});
+    function resizeInput(){input.style.height="auto";input.style.height=Math.min(78,input.scrollHeight)+"px"}
+    input.addEventListener("input",()=>{resizeInput();send.disabled=!input.value.trim();setOrbFlag("typingBoolean",!!input.value.trim())});
+    input.addEventListener("blur",()=>{if(currentState==="idle")setOrbFlag("typingBoolean",false)});
+    mic.addEventListener("click",async()=>{
+      if(!hasApi("start_listening")){addError("Lance Ava pour activer le micro.");return}
+      setState("listening");
+      try{const result=await window.pywebview.api.start_listening();if(!result||!result.accepted){addError((result&&result.error)||"Micro indisponible.");setState("idle")}}
+      catch(error){addError("Impossible d’activer le micro.");setState("error")}
+    });
+
+    $("collapse").addEventListener("click",()=>{shell.classList.toggle("compact");$("collapse").title=shell.classList.contains("compact")?"Déplier":"Réduire"});
+    $("choiceYes").addEventListener("click",()=>{window.avaClearChoices();submitText("confirme")});
+    $("choiceNo").addEventListener("click",()=>{window.avaClearChoices();submitText("annule")});
+    $("startupSkip").addEventListener("click",finishStartup);
+    $("startupSource").addEventListener("click",()=>{if(!startupSourceUrl)return;if(hasApi("open_external"))window.pywebview.api.open_external(startupSourceUrl);else window.open(startupSourceUrl,"_blank")});
+
+    // ----- the orb, driven by ava's real states.
+    function setOrbFlag(name,value){try{const p=orbState&&orbState.boolean(name);if(p)p.value=!!value}catch(_){}}
+    function fireOrb(name){try{const p=orbState&&orbState.trigger(name);if(p)p.trigger()}catch(_){}}
+    function syncRive(){
+      if(!orbState)return;
+      setOrbFlag("typingBoolean",currentState==="listening"||document.activeElement===input&&!!input.value);
+      setOrbFlag("loadingBoolean",currentState==="thinking");
+      if(currentState==="speaking")fireOrb("correct");
+      else if(currentState==="error")fireOrb("wrong");
+      else if(currentState==="action"||currentState==="booting")fireOrb("jump");
+    }
+    function initStartupVoiceOrb(){
+      const canvas=$("startupVoiceOrb"),ctx=canvas&&canvas.getContext("2d");if(!ctx)return;
+      const reduceMotion=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      function resizeCanvas(){
+        const rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height)return false;
+        const dpr=Math.min(2,window.devicePixelRatio||1),w=Math.round(rect.width*dpr),h=Math.round(rect.height*dpr);
+        if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}ctx.setTransform(dpr,0,0,dpr,0,0);return true;
+      }
+      function fluidPath(cx,cy,radius,t,amplitude){
+        const path=new Path2D(),count=120;
+        for(let i=0;i<=count;i++){
+          const angle=i/count*Math.PI*2;
+          const ripple=Math.sin(angle*3+t*1.7)*amplitude+Math.sin(angle*5-t*1.15)*amplitude*.48;
+          const r=radius+ripple,x=cx+Math.cos(angle)*r,y=cy+Math.sin(angle)*r;
+          if(i===0)path.moveTo(x,y);else path.lineTo(x,y);
+        }
+        path.closePath();return path;
+      }
+      function draw(now){
+        requestAnimationFrame(draw);if(!shell.classList.contains("startup")||!resizeCanvas())return;
+        const rect=canvas.getBoundingClientRect(),w=rect.width,h=rect.height,cx=w/2,cy=h/2;
+        // All the geometry was in hard pixels (radius 79, blur 34) while the
+        // canvas can be any size at all: the blob overflowed and got sliced
+        // square by the edge. We now derive a scale from the canvas itself,
+        // sized so blob + ripple + halo always fit inside (79+7.2 of shape plus
+        // 34 of blur = 120.2 drawing units).
+        const k=Math.min(w,h)/2/120;
+        const speaking=currentState==="speaking",acting=currentState==="action";
+        const speed=speaking?2.15:acting?1.3:.72,amplitude=(speaking?7.2:acting?4.4:3.1)*k,t=reduceMotion?0:now/1000*speed;
+        const colors=speaking?["#52edbd","#37cfe2","#6b7dff"]:acting?["#58deda","#8c70ff","#4388f5"]:["#46d9df","#7a68ed","#275fbd"];
+        ctx.clearRect(0,0,w,h);const shape=fluidPath(cx,cy,79*k,t,amplitude);
+        ctx.save();ctx.shadowColor=speaking?"rgba(82,237,189,.72)":"rgba(70,217,223,.58)";ctx.shadowBlur=(speaking?34:26)*k;
+        const base=ctx.createRadialGradient(cx-27*k,cy-32*k,4*k,cx,cy,92*k);base.addColorStop(0,"rgba(255,255,255,.96)");base.addColorStop(.18,colors[0]);base.addColorStop(.57,colors[1]);base.addColorStop(1,"#10152f");ctx.fillStyle=base;ctx.fill(shape);ctx.restore();
+        ctx.save();ctx.clip(shape);ctx.globalCompositeOperation="screen";
+        for(let i=0;i<5;i++){
+          const angle=t*(.18+i*.045)+i*1.37,orbit=(27+i*4)*k,bx=cx+Math.cos(angle)*orbit,by=cy+Math.sin(angle*1.12)*orbit;
+          const blob=ctx.createRadialGradient(bx,by,1,bx,by,(46-i*3)*k);blob.addColorStop(0,colors[i%colors.length]+"d9");blob.addColorStop(1,"rgba(0,0,0,0)");ctx.fillStyle=blob;ctx.fillRect(0,0,w,h);
+        }
+        const shade=ctx.createLinearGradient(0,cy-82*k,w,cy+85*k);shade.addColorStop(0,"rgba(255,255,255,.22)");shade.addColorStop(.48,"rgba(255,255,255,0)");shade.addColorStop(1,"rgba(1,5,18,.48)");ctx.fillStyle=shade;ctx.fillRect(0,0,w,h);ctx.restore();
+        ctx.save();ctx.strokeStyle=speaking?"rgba(132,255,215,.7)":"rgba(131,239,242,.5)";ctx.lineWidth=1.2;ctx.stroke(shape);ctx.restore();
+      }
+      requestAnimationFrame(draw);
+    }
+    // the topbar orb: the same liquid look as the startup screen, coloured by
+    // the current state. replaced the cartoon mascot with the nicer orb.
+    function initAvatarOrb(){
+      const canvas=$("orbCanvas"),ctx=canvas&&canvas.getContext("2d");if(!ctx)return;
+      const reduceMotion=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const PAL={
+        idle:["#46d9df","#7a68ed","#275fbd"],listening:["#4ae0bc","#37cfe2","#6b7dff"],
+        thinking:["#977eff","#6b7dff","#3a2f7a"],speaking:["#52edbd","#37cfe2","#6b7dff"],
+        action:["#58deda","#8c70ff","#4388f5"],booting:["#ffb152","#ff8a5c","#8c70ff"],
+        error:["#ff697e","#ff9aa6","#7a2f3a"]
+      };
+      function resize(){
+        const rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height)return false;
+        const dpr=Math.min(2,window.devicePixelRatio||1),w=Math.round(rect.width*dpr),h=Math.round(rect.height*dpr);
+        if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}ctx.setTransform(dpr,0,0,dpr,0,0);return true;
+      }
+      function fluidPath(cx,cy,radius,t,amp){
+        const path=new Path2D(),count=90;
+        for(let i=0;i<=count;i++){
+          const a=i/count*Math.PI*2;
+          const ripple=Math.sin(a*3+t*1.7)*amp+Math.sin(a*5-t*1.15)*amp*.48;
+          const r=radius+ripple,x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+          if(i===0)path.moveTo(x,y);else path.lineTo(x,y);
+        }
+        path.closePath();return path;
+      }
+      function draw(now){
+        requestAnimationFrame(draw);if(document.hidden||!resize())return;
+        const rect=canvas.getBoundingClientRect(),w=rect.width,h=rect.height,cx=w/2,cy=h/2;
+        const st=currentState,speaking=st==="speaking",acting=st==="action"||st==="booting",listening=st==="listening";
+        const speed=speaking?2.15:acting?1.35:listening?1.1:.7;
+        const amp=(speaking?2.6:acting?2.0:listening?2.2:1.5)*(Math.min(w,h)/66);
+        const t=reduceMotion?0:now/1000*speed,colors=PAL[st]||PAL.idle,R=Math.min(w,h)*0.34;
+        ctx.clearRect(0,0,w,h);const shape=fluidPath(cx,cy,R,t,amp);
+        ctx.save();ctx.shadowColor=colors[0]+"b3";ctx.shadowBlur=speaking?12:9;
+        const base=ctx.createRadialGradient(cx-R*.35,cy-R*.4,1,cx,cy,R*1.25);
+        base.addColorStop(0,"rgba(255,255,255,.96)");base.addColorStop(.18,colors[0]);base.addColorStop(.6,colors[1]);base.addColorStop(1,"#10152f");
+        ctx.fillStyle=base;ctx.fill(shape);ctx.restore();
+        ctx.save();ctx.clip(shape);ctx.globalCompositeOperation="screen";
+        for(let i=0;i<5;i++){
+          const a=t*(.18+i*.045)+i*1.37,orbit=R*.34+i*R*.05,bx=cx+Math.cos(a)*orbit,by=cy+Math.sin(a*1.12)*orbit;
+          const blob=ctx.createRadialGradient(bx,by,1,bx,by,R*.62-i*R*.04);blob.addColorStop(0,colors[i%colors.length]+"cc");blob.addColorStop(1,"rgba(0,0,0,0)");
+          ctx.fillStyle=blob;ctx.fillRect(0,0,w,h);
+        }
+        const shade=ctx.createLinearGradient(0,cy-R,w,cy+R);shade.addColorStop(0,"rgba(255,255,255,.22)");shade.addColorStop(.5,"rgba(255,255,255,0)");shade.addColorStop(1,"rgba(1,5,18,.42)");
+        ctx.fillStyle=shade;ctx.fillRect(0,0,w,h);ctx.restore();
+        ctx.save();ctx.strokeStyle=colors[0]+"99";ctx.lineWidth=1;ctx.stroke(shape);ctx.restore();
+      }
+      $("orbCanvas").classList.add("ready");$("avatar").classList.add("orb-ready");
+      requestAnimationFrame(draw);
+    }
+    window.addEventListener("load",()=>{initAvatarOrb();initStartupVoiceOrb()});
+
+    // ----- the api python calls
+    window.avaOverlayMode=()=>document.documentElement.style.background="transparent";
+    window.avaReady=options=>{const cfg=options||{};showIllustrations=cfg.show_illustrations!==false;shell.classList.toggle("compact",cfg.start_expanded===false);shell.classList.remove("dormant");setState("idle");setTimeout(()=>{if(!shell.classList.contains("startup"))input.focus()},180)};
+    window.avaStartup=profile=>renderStartup(profile);
+    window.avaStartupBrief=(text,ms,delays)=>{const t=String(text||"").trim();const wrap=$("startupBriefWrap");if(!t){wrap.classList.add("hidden");return}wrap.classList.remove("hidden");revealTimed($("startupBrief"),t,Math.max(1500,Number(ms)||6000),delays)};
+    window.avaStartupDone=()=>{shell.classList.remove("startup");setState("idle")};
+    // ------- mémoire : le vault obsidian, lisible depuis le panneau -------
+    const memoryPanel=$("memoryPanel"),memBody=$("memBody");
+    function renderMemLine(line){
+      const safe=line.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+      // [[lien]] -> gélule cliquable qui ouvre la note dans obsidian
+      return safe.replace(/\[\[([^\]]+)\]\]/g,
+        (_,name)=>`<button class="wl" data-note="${name}">${name}</button>`);
+    }
+    async function refreshMemory(){
+      if(!(window.pywebview&&window.pywebview.api&&window.pywebview.api.memory_snapshot)){
+        memBody.innerHTML='<div class="mem-empty">Disponible quand Ava tourne.</div>';return;
+      }
+      let snap=null;
+      try{snap=await window.pywebview.api.memory_snapshot();}catch(e){snap=null;}
+      if(!snap){memBody.innerHTML='<div class="mem-empty">Mémoire indisponible.</div>';return;}
+      let html="";
+      if((snap.facts||[]).length){
+        html+='<div class="mem-sub">🧠 Retenu</div>';
+        for(const f of snap.facts.slice(-6).reverse()) html+=`<div class="mem-line">${renderMemLine(f)}</div>`;
+      }
+      if((snap.journal||[]).length){
+        html+='<div class="mem-sub">📓 Aujourd’hui</div>';
+        for(const l of snap.journal.slice(-10).reverse()) html+=`<div class="mem-line">${renderMemLine(l)}</div>`;
+      }
+      memBody.innerHTML=html||'<div class="mem-empty">Rien encore aujourd’hui. Dis « retiens que… » ou « prends note de… ».</div>';
+    }
+    memBody.addEventListener("click",e=>{
+      const link=e.target.closest(".wl");
+      if(link&&window.pywebview&&window.pywebview.api&&window.pywebview.api.open_note)
+        window.pywebview.api.open_note(link.dataset.note);
+    });
+    $("memoryBtn").addEventListener("click",()=>{
+      const opening=memoryPanel.classList.contains("hidden");
+      memoryPanel.classList.toggle("hidden");
+      if(opening)refreshMemory();
+    });
+    $("memVault").addEventListener("click",()=>{
+      if(window.pywebview&&window.pywebview.api&&window.pywebview.api.open_vault)
+        window.pywebview.api.open_vault();
+    });
+
+    window.avaSetState=(state,label)=>setState(state,label);
+    window.avaIdle=()=>setState("idle");
+    window.avaDormant=()=>shell.classList.add("dormant");
+    window.avaShow=()=>shell.classList.remove("dormant");
+    window.avaHide=()=>shell.classList.add("dormant");
+    window.avaLevel=value=>document.documentElement.style.setProperty("--level",Math.max(0,Math.min(1,Number(value)||0)));
+    window.avaTranscript=(text,final=false)=>{const value=String(text||"").trim();$("liveText").textContent=value;$("live").classList.toggle("hidden",!value);if(final&&value)setTimeout(()=>$("live").classList.add("hidden"),900)};
+    window.avaMessage=(role,text,kind,delays)=>addMessage(role==="user"?"user":"assistant",text,kind,delays);
+    window.avaSources=items=>addSources(items);
+    window.avaPreview=(dataUrl,caption)=>addPreview(dataUrl,caption);
+    window.avaError=text=>addError(text||"Une erreur est survenue.");
+    window.avaChoices=(prompt,yesLabel,noLabel)=>{$("choicePrompt").textContent=prompt||"Tu confirmes ?";$("choiceYes").textContent=yesLabel||"Oui";$("choiceNo").textContent=noLabel||"Non";$("choices").classList.remove("hidden");shell.classList.remove("compact")};
+    window.avaClearChoices=()=>$("choices").classList.add("hidden");
+    // Ava was cut off: freeze the reveal wherever the voice stopped.
+    window.avaInterrupted=()=>{
+      const bubbles=messages.querySelectorAll(".message.assistant .bubble");
+      const bubble=bubbles[bubbles.length-1];if(!bubble)return;
+      const started=Number(bubble.dataset.startedAt||0);
+      const elapsed=started?performance.now()-started:0;
+      bubble.classList.add("cut");
+      bubble.querySelectorAll(".tok").forEach(tok=>{
+        const at=parseFloat(tok.style.animationDelay)||0;
+        if(at>elapsed)tok.classList.add("unsaid");
+      });
+    };
+    window.avaBoot=(apps,sub)=>{setState("booting");$("bootSub").textContent=sub||"Ouverture de tes applications…";$("bootRows").replaceChildren();(apps||[]).forEach(name=>{const row=document.createElement("div");row.className="boot-row";const check=document.createElement("span");check.className="boot-check";check.textContent="✓";const label=document.createElement("span");label.textContent=name;row.append(check,label);$("bootRows").appendChild(row)});$("boot").classList.remove("hidden")};
+    window.avaBootStep=index=>{const row=$("bootRows").children[index];if(row)row.classList.add("done")};
+    window.avaBootDone=()=>$("boot").classList.add("hidden");
+    window.avaStartupHint=()=>{shell.classList.remove("dormant");setState("idle")};
+    // opening the settings from the menu bar menu.
+    window.avaOpenSettings=()=>{shell.classList.remove("dormant");shell.classList.remove("compact");openSettings()};
+
+    // ----- settings
+    const F={name:$("fName"),city:$("fCity"),engine:$("fEngine"),reference:$("fReference"),voice:$("fVoice"),gid:$("fGid"),gsecret:$("fGsecret"),sens:$("fSens"),phrases:$("fPhrases"),apps:$("fApps"),illustrations:$("fIllustrations"),continuous:$("fContinuous"),startup:$("fStartup"),expanded:$("fExpanded"),hidden:$("fHidden")};
+    async function openSettings(){
+      let cfg=null;try{if(hasApi("get_config"))cfg=await window.pywebview.api.get_config()}catch(_){}
+      cfg=cfg||{identity:{name:"",city:"Paris"},voice:{voice_id:"",engine:"mistral"},google:{},wake:{phrases:["bonjour ava","ok ava"],clap:{sensitivity:50}},morning:{apps:[]},conversation:{continuous_listening:true},ui:{start_hidden:false,start_expanded:true,show_illustrations:true,startup_animation:true}};
+      F.name.value=cfg.identity?.name||"";F.city.value=cfg.identity?.city||"";F.engine.value=cfg.voice?.engine||"mistral";F.reference.value=cfg.voice?.reference||"";F.voice.value=cfg.voice?.voice_id||"";F.gid.value=cfg.google?.client_id||"";F.gsecret.value=cfg.google?.client_secret||"";F.sens.value=cfg.wake?.clap?.sensitivity??50;F.phrases.value=(cfg.wake?.phrases||[]).join("\n");F.apps.value=(cfg.morning?.apps||[]).map(a=>`${a.name}, ${a.position}`).join("\n");F.illustrations.checked=cfg.ui?.show_illustrations!==false;F.continuous.checked=cfg.conversation?.continuous_listening!==false;F.startup.checked=cfg.ui?.startup_animation!==false;F.expanded.checked=cfg.ui?.start_expanded!==false;F.hidden.checked=!!cfg.ui?.start_hidden;$("setNote").textContent="";$("settings").classList.remove("hidden");refreshGoogle()
+    }
+    function closeSettings(){$("settings").classList.add("hidden");stopGooglePolling()}
+    async function saveSettings(){
+      const apps=F.apps.value.split("\n").map(v=>v.trim()).filter(Boolean).map(line=>{const i=line.lastIndexOf(",");return{name:(i<0?line:line.slice(0,i)).trim(),position:(i<0?"tl":line.slice(i+1).trim().toLowerCase())}});
+      const patch={identity:{name:F.name.value.trim(),city:F.city.value.trim()},voice:{engine:F.engine.value,reference:F.reference.value.trim(),voice_id:F.voice.value.trim()},google:{client_id:F.gid.value.trim(),client_secret:F.gsecret.value.trim()},wake:{phrases:F.phrases.value.split("\n").map(v=>v.trim()).filter(Boolean),clap:{sensitivity:Number(F.sens.value)}},morning:{apps},conversation:{continuous_listening:F.continuous.checked},ui:{show_illustrations:F.illustrations.checked,startup_animation:F.startup.checked,start_expanded:F.expanded.checked,start_hidden:F.hidden.checked}};
+      if(!hasApi("save_config")){$("setNote").textContent="Aperçu : lance Ava pour enregistrer.";$("setNote").className="set-note err";return}
+      try{const result=await window.pywebview.api.save_config(patch);if(result?.error)throw new Error(result.error);showIllustrations=F.illustrations.checked;shell.classList.toggle("compact",!F.expanded.checked);$("setNote").textContent="Enregistré ✓";$("setNote").className="set-note ok";setTimeout(closeSettings,650)}catch(error){$("setNote").textContent="Erreur : "+error;$("setNote").className="set-note err"}
+    }
+    $("gear").addEventListener("click",openSettings);$("setClose").addEventListener("click",closeSettings);$("setCancel").addEventListener("click",closeSettings);$("setSave").addEventListener("click",saveSettings);
+
+    // ----- the google connector: the oauth flow lives on the python side, here
+    // we show the state and poll while a connection is in progress.
+    let googleTimer=null;
+    function stopGooglePolling(){if(googleTimer){clearInterval(googleTimer);googleTimer=null}}
+    function renderGoogle(status){
+      const state=$("googleState"),button=$("googleBtn"),hint=$("googleHint");
+      if(!status||!status.configured){
+        state.textContent="Identifiants OAuth manquants";state.className="err";
+        button.textContent="Se connecter";button.disabled=true;
+        hint.textContent="Renseigne l'ID et le secret du client ci-dessous, enregistre, puis reviens.";
+        $("googleKeys").open=true;return
+      }
+      button.disabled=false;
+      if(status.connecting){
+        state.textContent="Autorisation dans le navigateur…";state.className="";
+        button.textContent="Annuler";hint.textContent="Choisis ton compte Google, puis reviens ici.";return
+      }
+      if(status.connected){
+        state.textContent=status.email||"Compte connecté";state.className="ok";
+        button.textContent="Déconnecter";
+        hint.textContent="Ava lit ton agenda du jour et peut y ajouter des rendez-vous à la voix.";return
+      }
+      state.textContent=status.error||"Non connecté";state.className=status.error?"err":"";
+      button.textContent="Se connecter";hint.textContent="Ava pourra consulter ton agenda et y écrire des rendez-vous."
+    }
+    async function refreshGoogle(){
+      if(!hasApi("google_status")){renderGoogle({configured:false});return null}
+      try{const status=await window.pywebview.api.google_status();renderGoogle(status);return status}catch(_){return null}
+    }
+    $("googleBtn").addEventListener("click",async()=>{
+      const status=await refreshGoogle();
+      if(!status)return;
+      if(status.connected||status.connecting){
+        await window.pywebview.api.google_disconnect();stopGooglePolling();refreshGoogle();return
+      }
+      const started=await window.pywebview.api.google_connect();
+      if(started&&started.error){renderGoogle({configured:true,error:started.error});return}
+      stopGooglePolling();
+      googleTimer=setInterval(async()=>{const now=await refreshGoogle();if(now&&!now.connecting)stopGooglePolling()},1200);
+      refreshGoogle()
+    });
+    $("voiceTest").addEventListener("click",async()=>{
+      const note=$("voiceTestNote"),button=$("voiceTest");
+      if(!hasApi("test_voice")){note.textContent="Lance Ava pour entendre la voix.";return}
+      button.disabled=true;note.textContent="Synthèse en cours…";
+      try{
+        const result=await window.pywebview.api.test_voice({engine:F.engine.value,reference:F.reference.value.trim()});
+        note.textContent=result&&result.error?("Erreur : "+result.error):"Écoute…";
+      }catch(error){note.textContent="Erreur : "+error}
+      // the local voice runs at roughly speaking pace: re-enable the button
+      // once the sample has played, not before.
+      setTimeout(()=>{button.disabled=false;note.textContent=""},9000);
+    });
+    $("googleConsole").addEventListener("click",event=>{event.preventDefault();const url="https://console.cloud.google.com/apis/credentials";if(hasApi("open_external"))window.pywebview.api.open_external(url);else window.open(url,"_blank")});
+
+    // Standalone preview; Python takes over through avaReady on the real load.
+    setState("idle");resizeInput();
+  })();
+  </script>
+</body>
+</html>

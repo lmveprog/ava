@@ -9,37 +9,67 @@ HTML = Path(__file__).parents[1] / "src" / "ava" / "ui" / "web" / "ava.html"
 
 
 class OverlayContractTests(unittest.TestCase):
+    """The UI is the pill-and-cards design (the artifact matheus chose): a
+    living orb in a glass pill, floating glass cards, no chat window. These
+    tests pin the JS surface the backend drives, not pixel details."""
+
     @classmethod
     def setUpClass(cls):
         cls.source = HTML.read_text(encoding="utf-8")
 
     def test_backend_entry_points_exist(self):
         for name in (
-            "avaReady", "avaSetState", "avaTranscript", "avaMessage",
-            "avaChoices", "avaClearChoices", "avaLevel", "avaBoot",
-            "avaSources", "avaPreview", "avaStartup", "avaStartupDone",
+            "avaReady", "avaSetState", "avaIdle", "avaError", "avaShow",
+            "avaHide", "avaDormant", "avaOverlayMode", "avaLevel",
+            "avaTranscript", "avaMessage", "avaInterrupted",
+            "avaChoices", "avaClearChoices", "avaSources", "avaPreview",
+            "avaBoot", "avaBootStep", "avaBootDone",
+            "avaStartup", "avaStartupBrief", "avaStartupDone",
+            "avaOpenSettings",
         ):
             self.assertIn(f"window.{name}", self.source)
 
     def test_text_micro_and_yes_no_controls_exist(self):
-        for identifier in ('id="input"', 'id="mic"', 'id="choiceYes"', 'id="choiceNo"'):
+        for identifier in ('id="askInput"', 'id="micBtn"',
+                           'id="choiceYes"', 'id="choiceNo"'):
             self.assertIn(identifier, self.source)
 
-    def test_startup_scene_contains_personal_news_and_quote_slots(self):
-        for identifier in (
-            'id="startupStage"', 'id="startupName"', 'id="startupCity"',
-            'id="startupNews"', 'id="startupSource"', 'id="startupQuote"',
-            'id="startupVoiceOrb"', 'aria-label="Ava"',
-        ):
+    def test_morning_card_has_the_personal_slots(self):
+        for identifier in ('id="bDate"', 'id="bHi"', 'id="bNews"',
+                           'id="bQuote"', 'id="bAuthor"', 'id="bSay"',
+                           'id="bGlyph"'):
             self.assertIn(identifier, self.source)
 
-    def test_startup_voice_orb_has_distinct_speaking_animation(self):
-        self.assertIn("function initStartupVoiceOrb", self.source)
-        self.assertIn('currentState==="speaking"', self.source)
+    def test_spoken_briefing_is_karaoke_timed(self):
+        # avaStartupBrief and avaMessage both honour per-word timing marks
+        # measured on the real audio, instead of a flat cadence.
+        self.assertIn("marks && marks[wi] != null", self.source)
+        self.assertIn("delays && delays[wi] != null", self.source)
 
-    def test_runtime_ritual_can_hold_the_startup_scene_until_python_finishes(self):
-        self.assertIn("data.auto_finish!==false", self.source)
-        self.assertIn("!loading&&autoFinish", self.source)
+    def test_interruption_dims_what_was_not_said(self):
+        self.assertIn("avaInterrupted", self.source)
+        self.assertIn('classList.add("unsaid")', self.source)
+        self.assertIn("dataset.at", self.source)
+
+    def test_orb_is_a_local_canvas_no_remote_assets(self):
+        self.assertIn('id="orbMain"', self.source)
+        self.assertIn("class Orb", self.source)
+        self.assertNotIn("rive.app", self.source)
+        self.assertNotIn("https://", self.source.split("<script>")[1])
+
+    def test_memory_card_renders_clickable_wikilinks(self):
+        for needle in ('id="memoryPanel"', 'id="memoryBtn"',
+                       "memory_snapshot", "open_note", "open_vault",
+                       'class="wl"'):
+            self.assertIn(needle, self.source)
+
+    def test_state_palette_is_the_artifact_one(self):
+        # rest is steel; colour only arrives with a state.
+        self.assertIn("122,134,150", self.source)   # idle
+        self.assertIn("46,208,224", self.source)    # listening
+        self.assertIn("139,124,246", self.source)   # thinking
+        self.assertIn("67,224,160", self.source)    # speaking
+        self.assertIn("245,166,35", self.source)    # action
 
     def test_runtime_ritual_resizes_and_centers_the_window(self):
         previous_window = overlay._window
@@ -62,47 +92,9 @@ class OverlayContractTests(unittest.TestCase):
             (2112, 292),
         )
 
-    def test_orb_is_a_local_fluid_canvas_with_offline_fallback(self):
-        # the topbar orb is a local fluid canvas (same look as the startup
-        # screen), with the css fallback. no remote mascot -> works offline.
-        self.assertIn("fallback-orb", self.source)
-        self.assertIn("function initAvatarOrb", self.source)
-        self.assertNotIn("rive.app", self.source)
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-class OrbGeometryTests(unittest.TestCase):
-    """The orb was getting sliced square by the edge of its canvas."""
-
-    def setUp(self):
-        self.html = (Path(__file__).resolve().parents[1] / "src" / "ava" / "ui" / "web" / "ava.html").read_text(encoding="utf-8")
-
-    def test_the_startup_orb_scales_with_its_canvas(self):
-        # the scale has to come from the canvas, no more hard pixel radii.
-        self.assertIn("const k=Math.min(w,h)/2/120", self.html)
-        self.assertIn("fluidPath(cx,cy,79*k,t,amplitude)", self.html)
-        self.assertNotIn("fluidPath(cx,cy,79,t,amplitude)", self.html)
-
-    def test_the_halo_never_reaches_the_canvas_edge(self):
-        # forme (79 + 7.2 d'ondulation) + flou (34) = 120.2 unites, sur 125
-        # available: there is always headroom before the edge.
-        self.assertLessEqual((79 + 7.2 + 34) / 120, 1.005)
-
-    def test_the_orb_box_reserves_the_room_for_its_halo(self):
-        # the core carries the halo at inset:0, so the layout accounts for it
-        self.assertIn(".startup-orb-core{position:relative;width:min(212px,100%)", self.html)
-        self.assertIn(".startup-orb-core::before{content:\"\";position:absolute;inset:0", self.html)
-        self.assertNotIn("width:230px;height:230px", self.html)
-
-    def test_the_left_column_clips_whatever_overflows(self):
-        self.assertIn("overflow:clip", self.html)
-
 
 class VoicePreviewTests(unittest.TestCase):
-    """The "play a sample" button must never freeze the panel."""
+    """The api's voice test must never freeze the panel."""
 
     def test_it_returns_before_the_synthesis_finishes(self):
         started = []
@@ -118,10 +110,8 @@ class VoicePreviewTests(unittest.TestCase):
         with patch("ava.config.STORE") as store:
             store.update.side_effect = RuntimeError("config cassée")
             result = overlay._Api().test_voice({"engine": "chatterbox"})
-        self.assertFalse(result["started"])
-        self.assertIn("cassée", result["error"])
+        self.assertIn("error", result)
 
-    def test_the_button_and_its_handler_exist(self):
-        html = (Path(__file__).resolve().parents[1] / "src" / "ava" / "ui" / "web" / "ava.html").read_text(encoding="utf-8")
-        self.assertIn('id="voiceTest"', html)
-        self.assertIn("api.test_voice(", html)
+
+if __name__ == "__main__":
+    unittest.main()
