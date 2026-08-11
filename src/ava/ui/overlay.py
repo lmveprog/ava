@@ -57,6 +57,51 @@ class _Api:
         except Exception as exc:  # noqa: BLE001
             return {"error": str(exc)}
 
+    def memory_snapshot(self):
+        # what the memory panel shows: today's journal and the remembered facts.
+        try:
+            from ava.app import MEMORY
+            journal = []
+            path = MEMORY.daily_path()
+            if path.exists():
+                journal = [line[2:].strip() for line
+                           in path.read_text(encoding="utf-8").splitlines()
+                           if line.startswith("- ")]
+            return {"facts": MEMORY.facts(limit=20), "journal": journal[-30:]}
+        except Exception:  # noqa: BLE001
+            return {"facts": [], "journal": []}
+
+    def open_note(self, name):
+        # a [[wikilink]] clicked in the panel opens that very note in obsidian.
+        try:
+            import subprocess
+            import urllib.parse
+            from ava.app import MEMORY
+            MEMORY.ensure()
+            stem = str(name or "").strip()
+            for candidate in (MEMORY.journal_dir / f"{stem}.md",
+                              MEMORY.notes_dir / f"{stem}.md",
+                              MEMORY.vault / f"{stem}.md"):
+                if candidate.exists():
+                    uri = ("obsidian://open?path="
+                           + urllib.parse.quote(str(candidate)))
+                    subprocess.run(["open", uri], check=False)
+                    return {"opened": str(candidate)}
+            subprocess.run(["open", MEMORY.obsidian_uri()], check=False)
+            return {"opened": "vault"}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)}
+
+    def open_vault(self):
+        try:
+            import subprocess
+            from ava.app import MEMORY
+            MEMORY.ensure()
+            subprocess.run(["open", MEMORY.obsidian_uri()], check=False)
+            return {"opened": "vault"}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)}
+
     def submit_text(self, text):
         value = str(text or "").strip()
         if not value:

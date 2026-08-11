@@ -41,6 +41,7 @@ from ava.brain.conversation import LocalConversationEngine
 from ava.services import google_calendar as google_calendar
 from ava.instance_lock import SingleInstanceLock
 from ava import net as net
+from ava.audio import turn as turn
 from ava.mac import promethee as promethee
 from ava.services import ai_news as ai_news
 from ava.services import quotes as quotes
@@ -1720,7 +1721,9 @@ def _dispatch_command(cmd: str) -> None:
 
     # agent mode: ava drives the screen herself (capture -> vision model ->
     # click/type), announcing every action. Bounded and cautious (screen_agent).
-    for starter in ("prends la main", "pilote mon mac", "pilote l ecran",
+    for starter in ("prends la main", "prend la main", "prendre la main",
+                    "prends le controle", "prend le controle", "prendre le controle",
+                    "pilote mon mac", "pilote l ecran",
                     "mode agent", "debrouille toi pour", "occupe toi de"):
         if c.startswith(starter):
             goal = c[len(starter):].strip(" ,.")
@@ -1770,7 +1773,8 @@ def _dispatch_command(cmd: str) -> None:
     if any(w in c for w in ("mail", "mails", "gmail", "courriel", "boite mail")):
         wants_reading = any(w in c for w in (
             "lis", "lire", "resume", "combien", "nouveau", "nouveaux", "non lus",
-            "recus", "check", "verifie", "regarde",
+            "recus", "recu", "check", "verifie", "regarde", "dernier", "derniers",
+            "dis", "dire", "quel",
         ))
         if wants_reading and mailbox.credentials()[0]:
             _mark_route("mails", network=True)
@@ -2296,6 +2300,7 @@ def _record_utterance(max_s: float = 14.0, silence_s: float = 0.68,
     live = _live_recognizer()
     live_text = ""
     draft = {"busy": None, "at": 0.0, "fresh": False}
+    turn_gate = turn.TurnGate()
     started_at = time.monotonic()
     _drain_command_queue()
     _capture_audio.set()
@@ -2338,6 +2343,17 @@ def _record_utterance(max_s: float = 14.0, silence_s: float = 0.68,
                     except Exception:
                         live = None
                 _maybe_refresh_draft(draft, frames)
+            # semantic endpointing (smart turn v3): end the capture as soon as
+            # the sentence SOUNDS finished (0.24 s instead of 0.68 s of dead
+            # silence), and keep listening through a thinking pause when it
+            # doesn't. "unknown" (no model, error) leaves the fixed-silence
+            # decision untouched.
+            if gate.started:
+                verdict = turn_gate.decision(gate.silence, frames)
+                if verdict == "complete":
+                    complete = True
+                elif verdict == "wait":
+                    complete = False   # unfinished per the model: extend patience
             if complete or (gate.started and gate.elapsed >= max_s):
                 break
     finally:
@@ -3161,6 +3177,9 @@ def main() -> None:
     # the first "bonjour ava" doesn't have to wait.
     print(f"[info] voix : moteur {voice_tts.engine_name()}")
     voice_tts.prewarm()
+    # smart turn v3: pay the 1.2 s onnx load at boot, not on the first command
+    threading.Thread(target=lambda: turn.probability(b"\x00" * 32000),
+                     daemon=True, name="ava-turn-prewarm").start()
     # the morning briefing is prepared at startup so it can start instantly on
     # the first clap (calendar + weather + ai news + quote)
     print("[info] preparation du briefing du matin (agenda, meteo, actu ia, citation)...")

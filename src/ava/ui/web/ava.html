@@ -29,14 +29,46 @@
     button{color:inherit}
     .hidden{display:none!important}
 
+    /* ------- mémoire (vault obsidian) ------- */
+    .memory{margin:0 13px 9px;padding:12px 14px;border-radius:16px;
+      background:rgba(255,255,255,.035);border:1px solid var(--line);
+      max-height:300px;overflow-y:auto;animation:rise .25s ease both}
+    .memory::-webkit-scrollbar{width:0}
+    .mem-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+    .mem-title{display:flex;align-items:center;gap:7px;color:var(--faint);
+      font-size:10px;font-weight:700;letter-spacing:.17em;text-transform:uppercase}
+    .mem-title .pulse{width:6px;height:6px;border-radius:50%;background:rgb(var(--accent));
+      box-shadow:0 0 0 0 rgba(var(--accent),.55);animation:memPulse 1.8s ease-out infinite}
+    @keyframes memPulse{0%{box-shadow:0 0 0 0 rgba(var(--accent),.55)}70%{box-shadow:0 0 0 7px rgba(var(--accent),0)}100%{box-shadow:0 0 0 0 rgba(var(--accent),0)}}
+    .mem-vault{border:0;background:transparent;cursor:pointer;color:rgba(var(--accent),.9);
+      font:inherit;font-size:11px;font-weight:600;letter-spacing:.02em;padding:3px 7px;border-radius:8px}
+    .mem-vault:hover{background:rgba(var(--accent),.1)}
+    .mem-sub{margin:9px 0 5px;color:var(--faint);font-size:10px;font-weight:700;
+      letter-spacing:.14em;text-transform:uppercase}
+    .mem-line{color:var(--muted);font-size:12.5px;line-height:1.55;margin:3px 0}
+    .mem-line b{color:var(--ink);font-weight:560}
+    .mem-empty{color:var(--faint);font-size:12px;font-style:italic}
+    /* le wikilink obsidian, rendu comme une petite gélule d'accent cliquable */
+    .wl{display:inline-block;border:0;cursor:pointer;font:inherit;font-size:11.5px;
+      font-weight:600;color:rgb(var(--accent));padding:1px 8px;margin:0 1px;
+      border-radius:999px;background:rgba(var(--accent),.1);
+      box-shadow:inset 0 0 0 1px rgba(var(--accent),.22);
+      transition:background .2s ease,box-shadow .2s ease,transform .15s ease}
+    .wl:hover{background:rgba(var(--accent),.2);transform:translateY(-1px);
+      box-shadow:inset 0 0 0 1px rgba(var(--accent),.45),0 4px 14px -6px rgba(var(--accent),.6)}
+
     .shell{
       position:relative;width:400px;max-height:570px;overflow:hidden;
-      display:flex;flex-direction:column;border:1px solid var(--line);border-radius:27px;
+      display:flex;flex-direction:column;border-radius:27px;
       background:
-        radial-gradient(110% 70% at 5% -10%,rgba(var(--accent),.13),transparent 56%),
-        linear-gradient(145deg,rgba(25,27,35,.94),var(--panel));
-      -webkit-backdrop-filter:blur(32px) saturate(1.35);backdrop-filter:blur(32px) saturate(1.35);
-      box-shadow:0 30px 90px -28px rgba(0,0,0,.92),inset 0 1px rgba(255,255,255,.055);
+        radial-gradient(130% 80% at 15% -10%,rgba(var(--accent),.16),transparent 60%),
+        rgba(20,20,24,.62);
+      -webkit-backdrop-filter:blur(24px) saturate(1.35);backdrop-filter:blur(24px) saturate(1.35);
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.07),
+        inset 0 1px 0 0 rgba(255,255,255,.05),
+        0 28px 70px -22px rgba(0,0,0,.9),
+        0 0 0 1px rgba(0,0,0,.25);
       transform-origin:top right;transition:opacity .28s ease,transform .38s cubic-bezier(.2,.82,.2,1),height .35s ease;
     }
     .shell.dormant{opacity:0;transform:translateY(-8px) scale(.94);pointer-events:none}
@@ -353,11 +385,22 @@
         <button class="icon-btn" id="collapse" aria-label="Réduire" title="Réduire">
           <svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 10 4 4 4-4"/></svg>
         </button>
+        <button class="icon-btn" id="memoryBtn" aria-label="Mémoire" title="Mémoire (vault Obsidian)">
+          <svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v14H6.5a2.5 2.5 0 0 0 0 5H19"/><path d="M9 8h7M9 11.5h4.5"/></svg>
+        </button>
         <button class="icon-btn" id="gear" aria-label="Réglages" title="Réglages">
           <svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.5 1A7 7 0 0 0 14.7 6L14.4 3h-4.8L9.3 6a7 7 0 0 0-1.7 1.1l-2.5-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.5-1A7 7 0 0 0 9.3 18l.3 3h4.8l.3-3a7 7 0 0 0 1.7-1.1l2.5 1 2-3.4-2-1.5a7 7 0 0 0 .1-1Z"/></svg>
         </button>
       </div>
     </header>
+
+    <section class="memory hidden" id="memoryPanel">
+      <div class="mem-head">
+        <span class="mem-title"><span class="pulse"></span> Mémoire</span>
+        <button class="mem-vault" id="memVault">Ouvrir dans Obsidian ↗</button>
+      </div>
+      <div id="memBody"><div class="mem-empty">Chargement…</div></div>
+    </section>
 
     <section class="live-card hidden" id="live" aria-live="polite">
       <div class="live-label">Transcription en direct</div>
@@ -441,13 +484,15 @@
     "use strict";
     const $=id=>document.getElementById(id);
     const shell=$("shell"),messages=$("messages"),input=$("input"),send=$("send"),mic=$("mic");
+    // palette de l'artifact « Ava — overlay » : un repos acier discret, la
+    // couleur n'arrive qu'avec un état — c'est elle qui raconte ce qui se passe.
     const STATES={
-      idle:{rgb:[92,225,230],kicker:"Ava",status:"Prête",sub:"Écris ou appuie sur le micro"},
-      listening:{rgb:[74,224,188],kicker:"À l’écoute",status:"Je t’écoute",sub:"Parle naturellement, je détecte la fin"},
-      thinking:{rgb:[151,126,255],kicker:"Réflexion",status:"Je m’en occupe",sub:"Analyse de ta demande…"},
-      speaking:{rgb:[89,221,151],kicker:"Ava répond",status:"Voici",sub:"Tu peux déjà préparer la suite"},
-      action:{rgb:[255,177,82],kicker:"Action",status:"J’agis sur ton Mac",sub:"Exécution en cours…"},
-      booting:{rgb:[255,177,82],kicker:"Démarrage",status:"Je prépare ton espace",sub:"Quelques secondes…"},
+      idle:{rgb:[122,134,150],kicker:"Ava",status:"Prête",sub:"Écris ou appuie sur le micro"},
+      listening:{rgb:[46,208,224],kicker:"À l’écoute",status:"Je t’écoute",sub:"Parle naturellement, je détecte la fin"},
+      thinking:{rgb:[139,124,246],kicker:"Réflexion",status:"Je m’en occupe",sub:"Analyse de ta demande…"},
+      speaking:{rgb:[67,224,160],kicker:"Ava répond",status:"Voici",sub:"Tu peux déjà préparer la suite"},
+      action:{rgb:[245,166,35],kicker:"Action",status:"J’agis sur ton Mac",sub:"Exécution en cours…"},
+      booting:{rgb:[245,166,35],kicker:"Démarrage",status:"Je prépare ton espace",sub:"Quelques secondes…"},
       error:{rgb:[255,105,126],kicker:"Petit souci",status:"Je n’ai pas pu terminer",sub:"Réessaie ou écris la demande"}
     };
     let currentState="idle",showIllustrations=true,orbAnimation=null,orbState=null,startupTimer=null,startupSourceUrl="";
@@ -723,6 +768,47 @@
     window.avaStartup=profile=>renderStartup(profile);
     window.avaStartupBrief=(text,ms,delays)=>{const t=String(text||"").trim();const wrap=$("startupBriefWrap");if(!t){wrap.classList.add("hidden");return}wrap.classList.remove("hidden");revealTimed($("startupBrief"),t,Math.max(1500,Number(ms)||6000),delays)};
     window.avaStartupDone=()=>{shell.classList.remove("startup");setState("idle")};
+    // ------- mémoire : le vault obsidian, lisible depuis le panneau -------
+    const memoryPanel=$("memoryPanel"),memBody=$("memBody");
+    function renderMemLine(line){
+      const safe=line.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+      // [[lien]] -> gélule cliquable qui ouvre la note dans obsidian
+      return safe.replace(/\[\[([^\]]+)\]\]/g,
+        (_,name)=>`<button class="wl" data-note="${name}">${name}</button>`);
+    }
+    async function refreshMemory(){
+      if(!(window.pywebview&&window.pywebview.api&&window.pywebview.api.memory_snapshot)){
+        memBody.innerHTML='<div class="mem-empty">Disponible quand Ava tourne.</div>';return;
+      }
+      let snap=null;
+      try{snap=await window.pywebview.api.memory_snapshot();}catch(e){snap=null;}
+      if(!snap){memBody.innerHTML='<div class="mem-empty">Mémoire indisponible.</div>';return;}
+      let html="";
+      if((snap.facts||[]).length){
+        html+='<div class="mem-sub">🧠 Retenu</div>';
+        for(const f of snap.facts.slice(-6).reverse()) html+=`<div class="mem-line">${renderMemLine(f)}</div>`;
+      }
+      if((snap.journal||[]).length){
+        html+='<div class="mem-sub">📓 Aujourd’hui</div>';
+        for(const l of snap.journal.slice(-10).reverse()) html+=`<div class="mem-line">${renderMemLine(l)}</div>`;
+      }
+      memBody.innerHTML=html||'<div class="mem-empty">Rien encore aujourd’hui. Dis « retiens que… » ou « prends note de… ».</div>';
+    }
+    memBody.addEventListener("click",e=>{
+      const link=e.target.closest(".wl");
+      if(link&&window.pywebview&&window.pywebview.api&&window.pywebview.api.open_note)
+        window.pywebview.api.open_note(link.dataset.note);
+    });
+    $("memoryBtn").addEventListener("click",()=>{
+      const opening=memoryPanel.classList.contains("hidden");
+      memoryPanel.classList.toggle("hidden");
+      if(opening)refreshMemory();
+    });
+    $("memVault").addEventListener("click",()=>{
+      if(window.pywebview&&window.pywebview.api&&window.pywebview.api.open_vault)
+        window.pywebview.api.open_vault();
+    });
+
     window.avaSetState=(state,label)=>setState(state,label);
     window.avaIdle=()=>setState("idle");
     window.avaDormant=()=>shell.classList.add("dormant");

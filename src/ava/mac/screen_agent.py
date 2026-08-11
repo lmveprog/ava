@@ -57,7 +57,11 @@ Actions possibles :
 "say" = une phrase courte en français qui décrit l'action, dite à voix haute.
 Une seule action par tour. Vise le CENTRE de l'élément, pas son bord.
 Si l'élément demandé n'est PAS visible sur la capture, réponds "impossible"
-au lieu de deviner des coordonnées."""
+au lieu de deviner des coordonnées.
+"open_app" sert UNIQUEMENT pour une vraie application macOS (Safari, Notes...),
+jamais pour un site ou un onglet.
+Compare la capture avec l'historique : si ta dernière action n'a pas eu l'effet
+attendu, ne la répète pas — change d'approche ou réponds "impossible"."""
 
 
 @dataclass

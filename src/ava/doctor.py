@@ -142,6 +142,14 @@ def run_checks() -> list[Check]:
     except Exception as exc:  # noqa: BLE001
         checks.append(Check("memoire:vault", "warning", str(exc), required=False))
 
+    turn_model = paths.MODELS_DIR / "smart-turn-v3.2-cpu.onnx"
+    checks.append(Check(
+        "audio:smart-turn", "ok" if turn_model.exists() else "warning",
+        "fin de tour semantique active" if turn_model.exists()
+        else "modele absent : endpointing au silence fixe (plus lent)",
+        required=False,
+    ))
+
     try:
         access = subprocess.run(
             ["osascript", "-e", 'tell application "System Events" to get UI elements enabled'],
