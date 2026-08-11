@@ -443,6 +443,7 @@
 </div>
 
 <script>
+window.addEventListener("error", e => { window.__lastError = e.message + " @" + e.lineno; });
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
@@ -745,8 +746,22 @@
     if([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return "rain";
     return "partly";
   }
+  let startupTimer = null;
   window.avaStartup = (p) => {
     p = p || {};
+    // the scene ends itself: after `duration` the backend's finish_startup
+    // shrinks the window back to the corner and brings the pill in. without
+    // this call the app waits forever and no pill ever shows.
+    if(startupTimer){ clearTimeout(startupTimer); startupTimer = null; }
+    if(p.auto_finish !== false){
+      const secs = Math.max(3, Number(p.duration) || 9);
+      startupTimer = setTimeout(() => {
+        startupTimer = null;
+        const a = api();
+        if(a && a.finish_startup) a.finish_startup();
+        else window.avaStartupDone();
+      }, secs * 1000);
+    }
     setAccent(STATES.speaking.rgb); orb.set(STATES.speaking.rgb, 0.85, "speaking");
     $("bDate").textContent = p.date || "";
     const w = p.weather;
@@ -792,7 +807,10 @@
       el.scrollTop = el.scrollHeight;
     }, 800);
   };
-  window.avaStartupDone = () => { hide($("brief")); setState("idle"); };
+  window.avaStartupDone = () => {
+    if(startupTimer){ clearTimeout(startupTimer); startupTimer = null; }
+    hide($("brief")); setState("idle");
+  };
   window.avaOpenSettings = () => openSettings();
 
   // ---- input, choices, memory, settings wiring ----
