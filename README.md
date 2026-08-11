@@ -149,6 +149,25 @@ icon, and is written to `config.json` (mode `0600`, never committed).
 - Leave an error on screen and ask `Quel est ce problème ?` — she hides her
   panel, captures the screen, shows you the thumbnail, and reads it locally.
 - `Recherche les nouveautés de Python` for an answer with its sources.
+- `Lis mes mails` reads your unread out loud — sender and subject, IMAP
+  read-only, nothing marked as read. Two lines in `.env` (`GMAIL_USER`,
+  `GMAIL_APP_PASSWORD` from an app password) switch it on; without them she
+  just opens Gmail.
+- `Retiens que la voiture est au niveau 2`, then weeks later `Qu'est-ce que
+  tu sais sur la voiture ?` — long-term memory in a real **Obsidian vault**
+  (`~/Documents/AvaVault`): a daily journal of every exchange, dictated
+  notes as linked files, remembered facts, all wired with [[wikilinks]].
+  `Ouvre ma mémoire` opens it. Remembered facts feed the chat engine, so
+  she actually remembers across sessions.
+- `Prends la main et ouvre mes téléchargements` — **agent mode**: she
+  screenshots, asks a vision model for one action at a time, clicks and
+  types through accessibility, and narrates every step before doing it.
+  Bounded turns, and anything that looks like send / pay / buy / delete
+  stops her cold — that click is yours. Default backend is Mistral; point
+  `AVA_AGENT_BASE_URL` at LM Studio with a UI-grounding model (H Company's
+  Holo1.5, for instance) for a fully local agent.
+- `Ferme Spotify` quits one app politely; `ferme tout` closes what the
+  ritual opened.
 
 After each spoken answer the status becomes **"tu peux enchaîner"** — just keep
 talking. Silence closes the session; `stop`, `c'est bon` or `merci Ava` ends it

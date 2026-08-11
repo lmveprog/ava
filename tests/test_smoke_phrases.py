@@ -29,6 +29,16 @@ class RoutingGapsTest(unittest.TestCase):
         net.reset()
         self.addCleanup(net.reset)
         self.addCleanup(ava.ASSISTANT_STATE.dormant)
+        # a throwaway vault: smoke phrases must never touch the real memory.
+        import tempfile
+        from pathlib import Path as _Path
+        from unittest.mock import patch as _patch
+        from ava.services.obsidian import ObsidianMemory
+        vault = tempfile.TemporaryDirectory()
+        self.addCleanup(vault.cleanup)
+        memory = _patch.object(ava, "MEMORY", ObsidianMemory(_Path(vault.name)))
+        memory.start()
+        self.addCleanup(memory.stop)
 
     def run_phrase(self, phrase: str):
         """Run a phrasing, return (what was said, the calls observed)."""

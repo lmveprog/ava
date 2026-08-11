@@ -192,16 +192,21 @@ class LocalConversationEngine:
         with self._lock:
             return self._ask_anywhere(messages, max_tokens)
 
-    def ask(self, text: str) -> ConversationReply:
+    def ask(self, text: str, context: str = "") -> ConversationReply:
         if time.monotonic() < self._unavailable_until:
             return ConversationReply(False)
         question = text.strip()[:4000]
         if not question:
             return ConversationReply(False)
+        system_prompt = SYSTEM_PROMPT
+        if context.strip():
+            # Ava's Obsidian memory, served to the model as context: this is
+            # what makes "retiens que ..." matter in a conversation later.
+            system_prompt += "\n\n" + context.strip()[:2000]
         try:
             with self._lock:
                 messages = [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     *self._history[-8:],
                     {"role": "user", "content": question},
                 ]

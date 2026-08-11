@@ -42,6 +42,7 @@ INTENTS = {
     "ouvrir_app",        # cible = the application name
     "ouvrir_site",       # cible = a domain or url
     "mail",
+    "lire_mails",      # read the unread out loud
     "musique_jouer",
     "musique_pause",
     "musique_suivant",
@@ -50,6 +51,7 @@ INTENTS = {
     "luminosite",
     "minuteur",          # valeur = duration in seconds
     "note",              # cible = the text to jot down
+    "retenir",           # cible = a fact to keep in long-term memory
     "heure",
     "date",
     "meteo",
@@ -69,8 +71,8 @@ On te donne une phrase dictée par l'utilisateur. Tu réponds UNIQUEMENT par un 
 {"intent": "<une valeur de la liste>", "cible": "<texte ou chaîne vide>", "valeur": <nombre ou null>, "confiance": <0 à 1>}
 
 Valeurs autorisées pour "intent" :
-ouvrir_app, ouvrir_site, mail, musique_jouer, musique_pause, musique_suivant,
-musique_precedent, volume, luminosite, minuteur, note, heure, date, meteo, actu,
+ouvrir_app, ouvrir_site, mail, lire_mails, musique_jouer, musique_pause, musique_suivant,
+musique_precedent, volume, luminosite, minuteur, note, retenir, heure, date, meteo, actu,
 agenda_lire, agenda_creer, capture_ecran, verrouiller, recherche_web, discussion, inconnu
 
 Règles :
@@ -89,7 +91,9 @@ Exemples :
 "rappelle-moi dans un quart d'heure" -> {"intent":"minuteur","cible":"","valeur":900,"confiance":0.88}
 "pourquoi le ciel est bleu" -> {"intent":"discussion","cible":"pourquoi le ciel est bleu","valeur":null,"confiance":0.92}
 "le cours du bitcoin" -> {"intent":"recherche_web","cible":"cours du bitcoin","valeur":null,"confiance":0.9}
-"note qu'il faut rappeler Léa" -> {"intent":"note","cible":"rappeler Léa","valeur":null,"confiance":0.94}"""
+"note qu'il faut rappeler Léa" -> {"intent":"note","cible":"rappeler Léa","valeur":null,"confiance":0.94}
+"j'ai reçu des mails ce matin ?" -> {"intent":"lire_mails","cible":"","valeur":null,"confiance":0.9}
+"retiens que la voiture est au niveau 2" -> {"intent":"retenir","cible":"la voiture est au niveau 2","valeur":null,"confiance":0.93}"""
 
 # skills are appended on the fly: the model only ever gets their name and
 # description (the standard's discovery step), never their full instructions.

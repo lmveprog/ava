@@ -1,4 +1,5 @@
 import datetime as dt
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -8,6 +9,7 @@ from ava.mac.computer_use import ActionOutcome, ComputerIntent
 from ava.brain.conversation import ConversationReply
 from ava.services.google_calendar import GoogleEvent
 from ava.mac.screen_vision import VisionReply
+from ava.services.obsidian import ObsidianMemory
 from ava.services.web_research import ResearchReply, Source
 
 
@@ -20,9 +22,91 @@ class CommandRoutingTests(unittest.TestCase):
     def setUp(self):
         jarvis.ASSISTANT_STATE.dormant()
         jarvis.set_assistant_state(jarvis.AvaState.THINKING, "test", force=True)
+        # a throwaway vault: routing tests must never touch the real memory.
+        self._vault = tempfile.TemporaryDirectory()
+        self._memory = patch.object(
+            jarvis, "MEMORY", ObsidianMemory(Path(self._vault.name)),
+        )
+        self._memory.start()
 
     def tearDown(self):
+        self._memory.stop()
+        self._vault.cleanup()
         jarvis.ASSISTANT_STATE.dormant()
+
+    def test_close_one_app_quits_it_politely(self):
+        with patch.object(jarvis, "_osascript") as osa, \
+                patch.object(jarvis, "resolve_app", return_value="Spotify"), \
+                patch.object(jarvis, "speak") as speak:
+            jarvis.execute_command("ferme spotify")
+        osa.assert_called_once_with('tell application "Spotify" to quit')
+        speak.assert_called_once_with("Je ferme Spotify.")
+
+    def test_stop_the_music_still_pauses_instead_of_quitting(self):
+        with patch.object(jarvis, "_osascript") as osa, patch.object(jarvis, "speak"):
+            jarvis.execute_command("arrête la musique")
+        osa.assert_called_once_with('tell application "Spotify" to pause')
+
+    def test_remember_goes_to_the_obsidian_vault(self):
+        with patch.object(jarvis.MEMORY, "remember", return_value="le wifi est lent") as remember, \
+                patch.object(jarvis, "speak") as speak:
+            jarvis.execute_command("retiens que le wifi est lent")
+        remember.assert_called_once_with("le wifi est lent")
+        self.assertIn("retenu", speak.call_args_list[0][0][0].lower())
+
+    def test_recall_speaks_the_known_facts(self):
+        with patch.object(jarvis.MEMORY, "recall", return_value=["le wifi est lent"]), \
+                patch.object(jarvis, "speak") as speak:
+            jarvis.execute_command("qu'est-ce que tu sais sur le wifi")
+        self.assertIn("le wifi est lent", speak.call_args_list[0][0][0])
+
+    def test_reading_mails_uses_the_imap_summary(self):
+        summary = jarvis.mailbox.MailSummary(True, unread=2, previews=(("Jean", "devis"),))
+        with patch.object(jarvis.mailbox, "credentials", return_value=("a@b.c", "x")), \
+                patch.object(jarvis.mailbox, "fetch_unread", return_value=summary), \
+                patch.object(jarvis, "speak") as speak, \
+                patch.object(jarvis, "open_url") as open_url:
+            jarvis.execute_command("lis mes mails")
+        open_url.assert_not_called()
+        self.assertIn("2 mails non lus", speak.call_args_list[0][0][0])
+
+    def test_opening_mails_still_opens_gmail(self):
+        with patch.object(jarvis, "open_url") as open_url, patch.object(jarvis, "speak"):
+            jarvis.execute_command("ouvre mes mails")
+        self.assertIn("mail.google.com", open_url.call_args[0][0])
+
+    def test_dictated_note_lands_in_the_vault(self):
+        with patch.object(jarvis.MEMORY, "quick_note") as note, \
+                patch.object(jarvis, "speak") as speak:
+            jarvis.execute_command("prends note d'acheter du lait")
+        note.assert_called_once_with("acheter du lait")
+        self.assertIn("noté", speak.call_args_list[0][0][0])
+
+    def test_agent_mode_needs_a_goal(self):
+        with patch.object(jarvis.SCREEN_AGENT, "run") as run, \
+                patch.object(jarvis, "speak") as speak:
+            jarvis.execute_command("prends la main")
+        run.assert_not_called()
+        self.assertIn("prends la main", speak.call_args_list[0][0][0])
+
+    def test_agent_mode_runs_with_a_goal(self):
+        from ava.mac.screen_agent import AgentResult
+        result = AgentResult(True, "C'est fait.", steps=2)
+        with patch.object(jarvis.SCREEN_AGENT, "run", return_value=result) as run, \
+                patch.object(jarvis.COMPUTER_USE.controller, "accessibility_enabled",
+                             return_value=True), \
+                patch.object(jarvis, "screen_bounds", return_value=(0, 0, 1440, 900)), \
+                patch.object(jarvis, "speak") as speak:
+            jarvis.execute_command("prends la main et ouvre mes téléchargements")
+        self.assertEqual(run.call_args[0][0], "ouvre mes telechargements")
+        speak.assert_any_call("C'est fait.")
+
+    def test_every_exchange_is_journaled_in_the_vault(self):
+        with patch.object(jarvis.MEMORY, "log_interaction") as log, \
+                patch.object(jarvis, "speak"):
+            jarvis.execute_command("quelle heure est-il")
+        log.assert_called_once()
+        self.assertIn("heure", log.call_args[0][0])
 
     def test_keeps_spotify_next_intent(self):
         with patch.object(jarvis, "_spotify") as spotify, patch.object(jarvis, "speak"):

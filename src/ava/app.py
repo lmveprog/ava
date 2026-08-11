@@ -44,7 +44,10 @@ from ava import net as net
 from ava.mac import promethee as promethee
 from ava.services import ai_news as ai_news
 from ava.services import quotes as quotes
+from ava.mac.screen_agent import ScreenAgent
 from ava.mac.screen_vision import ScreenVision
+from ava.services import mailbox as mailbox
+from ava.services.obsidian import ObsidianMemory
 from ava.brain import skills as skills
 from ava import traces as traces
 from ava.brain.understanding import ROUTER as INTENT_ROUTER
@@ -854,6 +857,7 @@ def run_welcome_flow() -> None:
         # Keep the scene up while the briefing is prepared; on a first launch
         # the network or ElevenLabs can take a few seconds.
         text, path = get_welcome()
+        _remember_safely("morning_briefing", text)
         startup_payload = build_startup_payload(fetch_news=True, briefing=text)
         startup_payload["auto_finish"] = False
         ui("startup", startup_payload)
@@ -1048,11 +1052,15 @@ def speaking() -> bool:
         return _player is not None and _player.poll() is None
 
 
+_last_spoken = {"text": ""}
+
+
 def speak(text: str, state: str = "speaking") -> None:
     # put the orb in the right state, show the text, then speak.
     # the voice is made locally and cached by text; if the model won't load we
     # fall through to the macos system voice, `say`.
     global _player
+    _last_spoken["text"] = text     # kept for the vault journal
     set_assistant_state(state, text)
     # we measure making the voice, not playing it: the wait before ava opens her
     # mouth is the part you feel.
@@ -1524,6 +1532,10 @@ def execute_command(cmd: str) -> None:
         finally:
             trace["route"] = _ROUTE.route
             trace["network"] = _ROUTE.network
+            # every exchange leaves a line in the day's Obsidian note. traces
+            # stay content-free by design; the vault is the opposite: it IS the
+            # user's memory, on his own disk.
+            _remember_safely("log_interaction", cmd, _last_spoken["text"])
 
 
 # which route was taken is decided deep in the routing: we note it in passing
@@ -1623,6 +1635,91 @@ def _dispatch_command(cmd: str) -> None:
         speak("Je ferme tout." if closed else "Il n'y a rien à fermer.")
         return
 
+    # close or quit one application by name ("ferme la fenêtre"/"ferme l'onglet"
+    # are exact computer-use matches and never reach this point; "arrête" stays
+    # with the music so "arrête la musique" keeps pausing instead of quitting).
+    for verb in ("ferme ", "fermer ", "quitte ", "quitter "):
+        if c.startswith(verb):
+            target = c.split(verb, 1)[1].strip()
+            app = resolve_app(target)
+            if app:
+                _osascript(f'tell application "{app}" to quit')
+                speak(f"Je ferme {app}.")
+                return
+            break   # not a known app: let the other intents have a look
+
+    # Apostrophes and hyphens vary by transcription engine ("qu'est-ce" vs
+    # "qu est ce"): memory intents match on a flattened copy.
+    flat = re.sub(r"\s+", " ", re.sub(r"[-']", " ", c)).strip()
+
+    # memory: "retiens que ..." goes to the Obsidian vault
+    memory_match = re.match(
+        r"(?:retiens|retiens bien|souviens toi|memorise|note dans ta memoire)"
+        r"\s+(?:que\s+|qu\s+|de\s+)?(.+)", flat)
+    if memory_match:
+        fact = MEMORY.remember(memory_match.group(1))
+        if fact:
+            speak("C'est retenu, je l'ai noté dans ma mémoire.")
+        else:
+            speak("Qu'est-ce que je dois retenir ?")
+        return
+
+    # memory: "qu'est-ce que tu sais sur ..." / "tu te souviens de ..."
+    recall_match = re.match(
+        r"(?:que sais tu (?:sur|de)|qu est ce que tu sais (?:sur|de)|"
+        r"tu te souviens (?:de|que)?|rappelle moi ce que tu sais (?:sur|de))\s*(.*)",
+        flat)
+    if recall_match:
+        found = MEMORY.recall(recall_match.group(1) or c)
+        if found:
+            speak("Voilà ce que j'ai retenu : " + " Aussi : ".join(found))
+        else:
+            speak("Je n'ai encore rien retenu là-dessus. Dis-moi « retiens que » "
+                  "suivi de l'information.")
+        return
+
+    # open the memory vault in Obsidian (or Finder when Obsidian is missing)
+    if any(p in c for p in ("ta memoire", "ma memoire", "mon journal",
+                            "le vault", "mon vault")):
+        MEMORY.ensure()
+        speak("J'ouvre ta mémoire dans Obsidian.", state="action")
+        if resolve_app("obsidian"):
+            open_url(MEMORY.obsidian_uri())
+        else:
+            subprocess.run(["open", str(MEMORY.vault)], check=False)
+        return
+
+    # agent mode: ava drives the screen herself (capture -> vision model ->
+    # click/type), announcing every action. Bounded and cautious (screen_agent).
+    for starter in ("prends la main", "pilote mon mac", "pilote l ecran",
+                    "mode agent", "debrouille toi pour", "occupe toi de"):
+        if c.startswith(starter):
+            goal = c[len(starter):].strip(" ,.")
+            goal = re.sub(r"^(et|pour|de)\s+", "", goal)
+            if not goal:
+                speak("Dis-moi quoi faire, par exemple : prends la main et "
+                      "ouvre mes téléchargements.")
+                return
+            if not COMPUTER_USE.controller.accessibility_enabled():
+                speak("Pour piloter l'écran il me faut l'accessibilité : Réglages, "
+                      "Confidentialité et sécurité, Accessibilité.")
+                return
+            _mark_route("agent", network=True)
+            set_assistant_state(AvaState.ACTING, "Je prends la main")
+            speak("Je prends la main, je te dis tout ce que je fais.", state="action")
+            bounds = screen_bounds()
+            result = SCREEN_AGENT.run(
+                goal, (bounds[2] - bounds[0], bounds[3] - bounds[1]),
+                say=lambda msg: speak(msg, state="action"),
+            )
+            speak(result.message)
+            _remember_safely(
+                "log_event",
+                f"🤖 mode agent « {goal} » : {'ok' if result.ok else 'stoppé'} "
+                f"en {result.steps} tour(s) — {result.message}",
+            )
+            return
+
     # open an app or a site ("votre"/"offre" = voxtral mishearing "ouvre")
     for verb in ("ouvre moi ", "ouvre-moi ", "ouvre ", "ouvrir ", "lance ",
                  "lancer ", "demarre ", "affiche ", "votre ", "offre ",
@@ -1636,10 +1733,30 @@ def _dispatch_command(cmd: str) -> None:
         speak(_TRUNCATED[c])
         return
 
-    # mail
+    # mail: read the unread out loud when IMAP credentials are there, and when
+    # the phrasing asks for content ("lis", "combien", "résume"...); a plain
+    # "ouvre mes mails" still opens Gmail in the browser.
     if any(w in c for w in ("mail", "mails", "gmail", "courriel", "boite mail")):
+        wants_reading = any(w in c for w in (
+            "lis", "lire", "resume", "combien", "nouveau", "nouveaux", "non lus",
+            "recus", "check", "verifie", "regarde",
+        ))
+        if wants_reading and mailbox.credentials()[0]:
+            _mark_route("mails", network=True)
+            summary = mailbox.fetch_unread()
+            if summary.available:
+                speak(mailbox.spoken_summary(summary))
+                _remember_safely("log_event", f"📬 mails : {summary.unread} non lus")
+                return
+            speak("Je n'arrive pas à joindre Gmail pour le moment, j'ouvre ta boîte.")
+            open_url("https://mail.google.com/mail/u/0/")
+            return
         open_url("https://mail.google.com/mail/u/0/")
-        speak("J'ouvre ta boite mail.")
+        if wants_reading:
+            speak("J'ouvre Gmail. Pour que je lise tes mails à la voix, ajoute un "
+                  "mot de passe d'application Google dans mon fichier point env.")
+        else:
+            speak("J'ouvre ta boîte mail.")
         return
 
     # in-app search: Ava reads the results and shows her sources, without pushing
@@ -1752,11 +1869,8 @@ def _dispatch_command(cmd: str) -> None:
                       r"\s+(?:que\s+|de\s+|d'\s*)?(.*)", raw, re.I)
         content = (m.group(1).strip() if m else "").strip(" .")
         if content:
-            p = Path.home() / "Documents" / "ava-notes.md"
-            stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            with open(p, "a", encoding="utf-8") as f:
-                f.write(f"- {stamp} — {content}\n")
-            speak("C'est noté."); return
+            _append_note(content)
+            speak("C'est noté, dans ton vault."); return
         speak("Qu'est-ce que je dois noter ?"); return
 
     # music (spotify): play your favourite track, or pause
@@ -1788,7 +1902,7 @@ def _dispatch_command(cmd: str) -> None:
     for starter in discussion_starters:
         if c.startswith(starter):
             question = raw[len(starter):].strip() or raw
-            answer = CONVERSATION.ask(question)
+            answer = CONVERSATION.ask(question, context=_memory_context())
             if answer.available:
                 speak(answer.text)
             else:
@@ -1817,7 +1931,7 @@ def _dispatch_command(cmd: str) -> None:
 
     # conversation by default. If no engine answers, Ava runs a sourced in-app
     # search instead of opening an opaque tab.
-    answer = CONVERSATION.ask(raw)
+    answer = CONVERSATION.ask(raw, context=_memory_context())
     if answer.available:
         speak(answer.text)
     else:
@@ -1861,7 +1975,24 @@ def _dispatch_understood(raw: str) -> bool:
         return True
     if intent == "mail":
         open_url("https://mail.google.com/mail/u/0/")
-        speak("J'ouvre ta boite mail.")
+        speak("J'ouvre ta boîte mail.")
+        return True
+    if intent == "lire_mails":
+        if mailbox.credentials()[0]:
+            _mark_route("mails", network=True)
+            summary = mailbox.fetch_unread()
+            if summary.available:
+                speak(mailbox.spoken_summary(summary))
+                _remember_safely("log_event", f"📬 mails : {summary.unread} non lus")
+                return True
+        open_url("https://mail.google.com/mail/u/0/")
+        speak("J'ouvre ta boîte mail.")
+        return True
+    if intent == "retenir":
+        if not target:
+            speak("Qu'est-ce que je dois retenir ?"); return True
+        MEMORY.remember(target)
+        speak("C'est retenu, je l'ai noté dans ma mémoire.")
         return True
 
     if intent == "musique_jouer":
@@ -1932,7 +2063,7 @@ def _dispatch_understood(raw: str) -> bool:
     if intent == "recherche_web":
         _research(target or raw); return True
     if intent == "discussion":
-        answer = CONVERSATION.ask(target or raw)
+        answer = CONVERSATION.ask(target or raw, context=_memory_context())
         if answer.available:
             speak(answer.text)
             return True
@@ -1979,6 +2110,15 @@ def _run_skill(name: str, raw: str, installed: list) -> bool:
 
 
 def _append_note(content: str) -> None:
+    # Notes used to pile up in a flat ~/Documents/ava-notes.md; they now become
+    # real linked notes in the Obsidian vault. The flat file stays as a fallback
+    # so a disk hiccup never loses a dictated note.
+    try:
+        MEMORY.quick_note(content)
+        return
+    except Exception as exc:  # noqa: BLE001
+        if DEBUG:
+            print(f"[memoire] note vers le vault impossible : {exc}")
     path = Path.home() / "Documents" / "ava-notes.md"
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     with open(path, "a", encoding="utf-8") as handle:
@@ -2293,6 +2433,30 @@ COMPUTER_USE = ComputerUseEngine(
 )
 WEB_RESEARCH = WebResearch()
 SCREEN_VISION = ScreenVision()
+SCREEN_AGENT = ScreenAgent()
+# Ava's long-term memory lives in an Obsidian vault of plain markdown.
+# NOT ~/Documents/Ava: that's this repository (macOS is case-insensitive).
+MEMORY = ObsidianMemory(
+    Path(os.getenv("AVA_VAULT_DIR", str(Path.home() / "Documents" / "AvaVault"))),
+)
+
+
+def _remember_safely(fn: str, *args) -> None:
+    # The vault must never take the voice down with it: disk errors are
+    # logged in debug and otherwise swallowed on purpose.
+    try:
+        getattr(MEMORY, fn)(*args)
+    except Exception as exc:  # noqa: BLE001
+        if DEBUG:
+            print(f"[memoire] {fn} impossible : {exc}")
+
+
+def _memory_context() -> str:
+    # Remembered facts, slipped into the local discussion (never blocking).
+    try:
+        return MEMORY.context_for_llm()
+    except Exception:  # noqa: BLE001
+        return ""
 CONVERSATION = LocalConversationEngine(
     base_url=SETTINGS["conversation"]["base_url"],
     model=SETTINGS["conversation"]["model"],

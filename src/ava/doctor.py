@@ -118,6 +118,30 @@ def run_checks() -> list[Check]:
         required=False,
     ))
 
+    def env_has(name: str) -> bool:
+        return any(
+            line.strip().startswith(f"{name}=") and line.strip() != f"{name}="
+            for line in env_text.splitlines()
+        )
+
+    mails_ok = env_has("GMAIL_USER") and env_has("GMAIL_APP_PASSWORD")
+    checks.append(Check(
+        "mails:imap", "ok" if mails_ok else "warning",
+        "identifiants presents (lecture a la voix)" if mails_ok
+        else "GMAIL_USER / GMAIL_APP_PASSWORD absents : ava ouvrira gmail web",
+        required=False,
+    ))
+
+    try:
+        import os as _os
+        from ava.services.obsidian import ObsidianMemory
+        vault = Path(_os.getenv("AVA_VAULT_DIR",
+                                str(Path.home() / "Documents" / "AvaVault")))
+        ObsidianMemory(vault).ensure()
+        checks.append(Check("memoire:vault", "ok", str(vault), required=False))
+    except Exception as exc:  # noqa: BLE001
+        checks.append(Check("memoire:vault", "warning", str(exc), required=False))
+
     try:
         access = subprocess.run(
             ["osascript", "-e", 'tell application "System Events" to get UI elements enabled'],
