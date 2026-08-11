@@ -750,6 +750,7 @@ _flow_active = threading.Event()
 #
 # AVA_PAUSED=1: ava starts without listening (handy while tuning her, or to work
 # next to her without waking her up).
+_listening_paused = threading.Event()
 if os.getenv("AVA_PAUSED", "").strip().lower() in ("1", "true", "yes", "on"):
     _listening_paused.set()
 
