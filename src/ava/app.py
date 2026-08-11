@@ -1707,9 +1707,11 @@ def _dispatch_command(cmd: str) -> None:
             _mark_route("agent", network=True)
             set_assistant_state(AvaState.ACTING, "Je prends la main")
             speak("Je prends la main, je te dis tout ce que je fais.", state="action")
-            bounds = screen_bounds()
+            # the capture covers the PRIMARY display only: scale to it, not to
+            # the union of every screen (wrong as soon as there are two).
+            from ava.mac.screen_agent import main_screen_size
             result = SCREEN_AGENT.run(
-                goal, (bounds[2] - bounds[0], bounds[3] - bounds[1]),
+                goal, main_screen_size(),
                 say=lambda msg: speak(msg, state="action"),
             )
             speak(result.message)

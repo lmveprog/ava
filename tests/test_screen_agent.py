@@ -31,6 +31,10 @@ class ScreenAgentTests(unittest.TestCase):
         self.assertEqual(parse_holo_action("Done. The folder is open.")["action"], "done")
         self.assertIsNone(parse_holo_action("je réfléchis encore un peu"))
 
+    def test_truncated_json_is_salvaged(self):
+        step = parse_holo_action('{"action": "click", "x": 27, "y": 961, "text": "",')
+        self.assertEqual((step["action"], step["x"], step["y"]), ("click", 27, 961))
+
     def test_risky_actions_are_flagged(self):
         self.assertTrue(looks_risky({"say": "je clique sur Envoyer", "text": ""}))
         self.assertTrue(looks_risky({"say": "", "text": "confirmer le paiement"}))
