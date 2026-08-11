@@ -106,6 +106,61 @@ def extract_json(text: str) -> dict | None:
         return None
 
 
+def parse_holo_action(text: str) -> dict | None:
+    """Understand the native dialect of grounding models (H Company's Holo).
+
+    Instructed to answer JSON, those models often reply in their trained action
+    style instead: `Click(x=512, y=300)`, `type(content="hello")`,
+    `press("enter")`, `scroll(down)`... Rather than failing the turn, we
+    translate the common shapes into our step dict.
+    """
+    raw = text.strip()
+    flat = raw.lower()
+
+    def coords(match: re.Match) -> tuple[int, int]:
+        return int(float(match.group(1))), int(float(match.group(2)))
+
+    numbers = r"[^\d-]*(-?\d+(?:\.\d+)?)[^\d-]+(-?\d+(?:\.\d+)?)"
+    click = re.search(r"(?:double[_ ]?click|doubleclick)\(" + numbers, flat)
+    if click:
+        x, y = coords(click)
+        return {"action": "double_click", "x": x, "y": y,
+                "say": "Je double-clique."}
+    click = re.search(r"(?:left_)?click(?:_at)?\(" + numbers, flat)
+    if click:
+        x, y = coords(click)
+        return {"action": "click", "x": x, "y": y, "say": "Je clique."}
+    # "CLICK <point>[[512, 300]]" and friends
+    click = re.search(r"click[^\[]*\[\[" + numbers, flat)
+    if click:
+        x, y = coords(click)
+        return {"action": "click", "x": x, "y": y, "say": "Je clique."}
+
+    typed = re.search(r"(?:type|write|input)\((?:content=|text=)?[\"']?([^\"')]+)", raw,
+                      re.IGNORECASE)
+    if typed:
+        return {"action": "type", "text": typed.group(1).strip(),
+                "say": "Je tape le texte."}
+
+    key = re.search(r"(?:press|key|hotkey)\([\"']?(\w+)", flat)
+    if key:
+        name = {"enter": "return", "return": "return", "esc": "escape",
+                "escape": "escape", "tab": "tab"}.get(key.group(1))
+        if name:
+            return {"action": "key", "text": name, "say": "J'appuie sur la touche."}
+
+    if re.search(r"scroll\((?:down|.*direction=[\"']?down)", flat):
+        return {"action": "scroll_down", "say": "Je descends dans la page."}
+    if re.search(r"scroll\((?:up|.*direction=[\"']?up)", flat):
+        return {"action": "scroll_up", "say": "Je remonte dans la page."}
+
+    if re.search(r"^(?:done|finished|termine|terminé)\b|\btask (?:is )?(?:done|complete)", flat):
+        return {"action": "done", "say": "C'est fait."}
+    if re.search(r"^(?:impossible|infeasible|cannot|can't)\b", flat):
+        return {"action": "impossible", "say": raw[:120]}
+    return None
+
+
 def looks_risky(step: dict) -> bool:
     blob = " ".join(str(step.get(k, "")) for k in ("say", "text")).lower()
     return any(word in blob for word in RISKY_WORDS)
@@ -129,7 +184,7 @@ class ScreenAgent:
     # --- model call ----------------------------------------------------------
 
     def _ask_model(self, goal: str, shot: Path, img_w: int, img_h: int,
-                   history: list[str]) -> dict | None:
+                   history: list[str]) -> str:
         image_b64 = base64.b64encode(shot.read_bytes()).decode("ascii")
         past = ("Actions déjà faites :\n" + "\n".join(history)) if history else \
             "C'est le premier tour."
@@ -147,15 +202,17 @@ class ScreenAgent:
                     {"role": "user", "content": [
                         {"type": "text",
                          "text": f"Objectif : {goal}\n{past}\nQuelle est la prochaine action ?"},
+                        # object form: the openai standard, accepted by mistral
+                        # AND required by lm studio (a bare string is refused).
                         {"type": "image_url",
-                         "image_url": f"data:image/jpeg;base64,{image_b64}"},
+                         "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
                     ]},
                 ],
             },
             timeout=net.timeout(45) if not self._is_local() else 45,
         )
         response.raise_for_status()
-        return extract_json(response.json()["choices"][0]["message"]["content"])
+        return response.json()["choices"][0]["message"]["content"]
 
     # --- action execution ----------------------------------------------------
 
@@ -215,7 +272,8 @@ class ScreenAgent:
                                    step_no - 1, history)
             img_w, img_h = image_size(shot)
             try:
-                step = self._ask_model(goal, shot, img_w, img_h, history)
+                reply = self._ask_model(goal, shot, img_w, img_h, history)
+                step = extract_json(reply) or parse_holo_action(reply)
                 if not self._is_local():
                     net.note_success("agent")
             except Exception as exc:  # noqa: BLE001
